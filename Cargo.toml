@@ -1,0 +1,10 @@
+[package]
+name = "git-crypt"
+version = "0.7.0"
+authors = ["Andrew Ayer <agwa@andrewayer.name>", "Kamil Domański <kamil@domanski.co>"]
+
+[dependencies]
+libc = "0.2"
+
+[build-dependencies]
+cc = "1.0"

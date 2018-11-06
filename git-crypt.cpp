@@ -132,8 +132,8 @@ static int version (int argc, const char** argv)
 	return 0;
 }
 
-
-int main (int argc, const char** argv)
+extern "C"
+int cpp_main (int argc, const char** argv)
 try {
 	argv0 = argv[0];
 
@@ -262,5 +262,3 @@ try {
 	std::cerr << "git-crypt: I/O error: " << e.what() << std::endl;
 	return 1;
 }
-
-
