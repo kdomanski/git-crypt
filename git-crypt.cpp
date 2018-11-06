@@ -78,64 +78,12 @@ static void print_usage (std::ostream& out)
 	out << "See 'git-crypt help COMMAND' for more information on a specific command." << std::endl;
 }
 
-static void print_version (std::ostream& out)
-{
-	out << "git-crypt " << VERSION << std::endl;
-}
-
-static bool help_for_command (const char* command, std::ostream& out)
-{
-	if (std::strcmp(command, "init") == 0) {
-		help_init(out);
-	} else if (std::strcmp(command, "unlock") == 0) {
-		help_unlock(out);
-	} else if (std::strcmp(command, "lock") == 0) {
-		help_lock(out);
-	} else if (std::strcmp(command, "add-gpg-user") == 0) {
-		help_add_gpg_user(out);
-	} else if (std::strcmp(command, "rm-gpg-user") == 0) {
-		help_rm_gpg_user(out);
-	} else if (std::strcmp(command, "ls-gpg-users") == 0) {
-		help_ls_gpg_users(out);
-	} else if (std::strcmp(command, "export-key") == 0) {
-		help_export_key(out);
-	} else if (std::strcmp(command, "keygen") == 0) {
-		help_keygen(out);
-	} else if (std::strcmp(command, "migrate-key") == 0) {
-		help_migrate_key(out);
-	} else if (std::strcmp(command, "refresh") == 0) {
-		help_refresh(out);
-	} else if (std::strcmp(command, "status") == 0) {
-		help_status(out);
-	} else {
-		return false;
-	}
-	return true;
-}
-
-static int help (int argc, const char** argv)
-{
-	if (argc == 0) {
-		print_usage(std::cout);
-	} else {
-		if (!help_for_command(argv[0], std::cout)) {
-			std::clog << "Error: '" << argv[0] << "' is not a git-crypt command. See 'git-crypt help'." << std::endl;
-			return 1;
-		}
-	}
-	return 0;
-}
-
-static int version (int argc, const char** argv)
-{
-	print_version(std::cout);
-	return 0;
-}
-
 extern "C"
 int cpp_main (int argc, const char** argv)
 try {
 	argv0 = argv[0];
+	--argc;
+	++argv;
 
 	/*
 	 * General initialization
@@ -143,35 +91,6 @@ try {
 
 	init_std_streams();
 	init_crypto();
-
-	/*
-	 * Parse command line arguments
-	 */
-	int			arg_index = 1;
-	while (arg_index < argc && argv[arg_index][0] == '-') {
-		if (std::strcmp(argv[arg_index], "--help") == 0) {
-			print_usage(std::clog);
-			return 0;
-		} else if (std::strcmp(argv[arg_index], "--version") == 0) {
-			print_version(std::clog);
-			return 0;
-		} else if (std::strcmp(argv[arg_index], "--") == 0) {
-			++arg_index;
-			break;
-		} else {
-			std::clog << argv0 << ": " << argv[arg_index] << ": Unknown option" << std::endl;
-			print_usage(std::clog);
-			return 2;
-		}
-	}
-
-	argc -= arg_index;
-	argv += arg_index;
-
-	if (argc == 0) {
-		print_usage(std::clog);
-		return 2;
-	}
 
 	/*
 	 * Pass off to command handler
@@ -182,12 +101,6 @@ try {
 
 	try {
 		// Public commands:
-		if (std::strcmp(command, "help") == 0) {
-			return help(argc, argv);
-		}
-		if (std::strcmp(command, "version") == 0) {
-			return version(argc, argv);
-		}
 		if (std::strcmp(command, "init") == 0) {
 			return init(argc, argv);
 		}
@@ -233,7 +146,7 @@ try {
 		}
 	} catch (const Option_error& e) {
 		std::clog << "git-crypt: Error: " << e.option_name << ": " << e.message << std::endl;
-		help_for_command(command, std::clog);
+		//help_for_command(command, std::clog);
 		return 2;
 	}
 

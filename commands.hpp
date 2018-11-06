@@ -58,17 +58,17 @@ int refresh (int argc, const char** argv);
 int status (int argc, const char** argv);
 
 // Help messages:
-void help_init (std::ostream&);
-void help_unlock (std::ostream&);
-void help_lock (std::ostream&);
-void help_add_gpg_user (std::ostream&);
-void help_rm_gpg_user (std::ostream&);
-void help_ls_gpg_users (std::ostream&);
-void help_export_key (std::ostream&);
-void help_keygen (std::ostream&);
-void help_migrate_key (std::ostream&);
-void help_refresh (std::ostream&);
-void help_status (std::ostream&);
+extern "C" void help_init ();
+extern "C" void help_unlock ();
+extern "C" void help_lock ();
+extern "C" void help_add_gpg_user ();
+extern "C" void help_rm_gpg_user ();
+extern "C" void help_ls_gpg_users ();
+extern "C" void help_export_key ();
+extern "C" void help_keygen ();
+extern "C" void help_migrate_key ();
+extern "C" void help_refresh ();
+extern "C" void help_status ();
 
 // other
 std::string get_git_config (const std::string& name);

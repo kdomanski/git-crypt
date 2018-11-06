@@ -755,7 +755,7 @@ int clean (int argc, const char** argv)
 	// under deterministic CPA as long as the synthetic IV is derived from a
 	// secure PRF applied to the message.  Since HMAC-SHA1 is a secure PRF, this
 	// encryption scheme is semantically secure under deterministic CPA.
-	// 
+	//
 	// Informally, consider that if a file changes just a tiny bit, the IV will
 	// be completely different, resulting in a completely different ciphertext
 	// that leaks no information about the similarities of the plaintexts.  Also,
@@ -923,15 +923,6 @@ int diff (int argc, const char** argv)
 	return decrypt_file_to_stdout(key_file, header, in);
 }
 
-void help_init (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt init [OPTIONS]" << std::endl;
-	out << std::endl;
-	out << "    -k, --key-name KEYNAME      Initialize the given key, instead of the default" << std::endl;
-	out << std::endl;
-}
-
 int init (int argc, const char** argv)
 {
 	const char*	key_name = 0;
@@ -949,7 +940,7 @@ int init (int argc, const char** argv)
 	}
 	if (argc - argi != 0) {
 		std::clog << "Error: git-crypt init takes no arguments" << std::endl;
-		help_init(std::clog);
+		help_init();
 		return 2;
 	}
 
@@ -983,12 +974,6 @@ int init (int argc, const char** argv)
 	return 0;
 }
 
-void help_unlock (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt unlock" << std::endl;
-	out << "   or: git-crypt unlock KEY_FILE ..." << std::endl;
-}
 int unlock (int argc, const char** argv)
 {
 	// 1. Make sure working directory is clean (ignoring untracked files)
@@ -1083,16 +1068,6 @@ int unlock (int argc, const char** argv)
 	return 0;
 }
 
-void help_lock (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt lock [OPTIONS]" << std::endl;
-	out << std::endl;
-	out << "    -a, --all                Lock all keys, instead of just the default" << std::endl;
-	out << "    -k, --key-name KEYNAME   Lock the given key, instead of the default" << std::endl;
-	out << "    -f, --force              Lock even if unclean (you may lose uncommited work)" << std::endl;
-	out << std::endl;
-}
 int lock (int argc, const char** argv)
 {
 	const char*	key_name = 0;
@@ -1110,7 +1085,7 @@ int lock (int argc, const char** argv)
 
 	if (argc - argi != 0) {
 		std::clog << "Error: git-crypt lock takes no arguments" << std::endl;
-		help_lock(std::clog);
+		help_lock();
 		return 2;
 	}
 
@@ -1178,16 +1153,6 @@ int lock (int argc, const char** argv)
 	return 0;
 }
 
-void help_add_gpg_user (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt add-gpg-user [OPTIONS] GPG_USER_ID ..." << std::endl;
-	out << std::endl;
-	out << "    -k, --key-name KEYNAME      Add GPG user to given key, instead of default" << std::endl;
-	out << "    -n, --no-commit             Don't automatically commit" << std::endl;
-	out << "    --trusted                   Assume the GPG user IDs are trusted" << std::endl;
-	out << std::endl;
-}
 int add_gpg_user (int argc, const char** argv)
 {
 	const char*		key_name = 0;
@@ -1203,7 +1168,7 @@ int add_gpg_user (int argc, const char** argv)
 	int			argi = parse_options(options, argc, argv);
 	if (argc - argi == 0) {
 		std::clog << "Error: no GPG user ID specified" << std::endl;
-		help_add_gpg_user(std::clog);
+		help_add_gpg_user();
 		return 2;
 	}
 
@@ -1297,26 +1262,12 @@ int add_gpg_user (int argc, const char** argv)
 	return 0;
 }
 
-void help_rm_gpg_user (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt rm-gpg-user [OPTIONS] GPG_USER_ID ..." << std::endl;
-	out << std::endl;
-	out << "    -k, --key-name KEYNAME      Remove user from given key, instead of default" << std::endl;
-	out << "    -n, --no-commit             Don't automatically commit" << std::endl;
-	out << std::endl;
-}
 int rm_gpg_user (int argc, const char** argv) // TODO
 {
 	std::clog << "Error: rm-gpg-user is not yet implemented." << std::endl;
 	return 1;
 }
 
-void help_ls_gpg_users (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt ls-gpg-users" << std::endl;
-}
 int ls_gpg_users (int argc, const char** argv) // TODO
 {
 	// Sketch:
@@ -1337,15 +1288,6 @@ int ls_gpg_users (int argc, const char** argv) // TODO
 	return 1;
 }
 
-void help_export_key (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt export-key [OPTIONS] FILENAME" << std::endl;
-	out << std::endl;
-	out << "    -k, --key-name KEYNAME      Export the given key, instead of the default" << std::endl;
-	out << std::endl;
-	out << "When FILENAME is -, export to standard out." << std::endl;
-}
 int export_key (int argc, const char** argv)
 {
 	// TODO: provide options to export only certain key versions
@@ -1358,7 +1300,7 @@ int export_key (int argc, const char** argv)
 
 	if (argc - argi != 1) {
 		std::clog << "Error: no filename specified" << std::endl;
-		help_export_key(std::clog);
+		help_export_key();
 		return 2;
 	}
 
@@ -1379,18 +1321,11 @@ int export_key (int argc, const char** argv)
 	return 0;
 }
 
-void help_keygen (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt keygen FILENAME" << std::endl;
-	out << std::endl;
-	out << "When FILENAME is -, write to standard out." << std::endl;
-}
 int keygen (int argc, const char** argv)
 {
 	if (argc != 1) {
 		std::clog << "Error: no filename specified" << std::endl;
-		help_keygen(std::clog);
+		help_keygen();
 		return 2;
 	}
 
@@ -1416,18 +1351,11 @@ int keygen (int argc, const char** argv)
 	return 0;
 }
 
-void help_migrate_key (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt migrate-key OLDFILENAME NEWFILENAME" << std::endl;
-	out << std::endl;
-	out << "Use - to read from standard in/write to standard out." << std::endl;
-}
 int migrate_key (int argc, const char** argv)
 {
 	if (argc != 2) {
 		std::clog << "Error: filenames not specified" << std::endl;
-		help_migrate_key(std::clog);
+		help_migrate_key();
 		return 2;
 	}
 
@@ -1463,31 +1391,12 @@ int migrate_key (int argc, const char** argv)
 	return 0;
 }
 
-void help_refresh (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt refresh" << std::endl;
-}
 int refresh (int argc, const char** argv) // TODO: do a force checkout, much like in unlock
 {
 	std::clog << "Error: refresh is not yet implemented." << std::endl;
 	return 1;
 }
 
-void help_status (std::ostream& out)
-{
-	//     |--------------------------------------------------------------------------------| 80 chars
-	out << "Usage: git-crypt status [OPTIONS] [FILE ...]" << std::endl;
-	//out << "   or: git-crypt status -r [OPTIONS]" << std::endl;
-	//out << "   or: git-crypt status -f" << std::endl;
-	out << std::endl;
-	out << "    -e             Show encrypted files only" << std::endl;
-	out << "    -u             Show unencrypted files only" << std::endl;
-	//out << "    -r             Show repository status only" << std::endl;
-	out << "    -f, --fix      Fix problems with the repository" << std::endl;
-	//out << "    -z             Machine-parseable output" << std::endl;
-	out << std::endl;
-}
 int status (int argc, const char** argv)
 {
 	// Usage:
@@ -1682,4 +1591,3 @@ int status (int argc, const char** argv)
 
 	return exit_status;
 }
-
