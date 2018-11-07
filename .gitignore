@@ -3,3 +3,6 @@ git-crypt
 
 /target
 **/*.rs.bk
+
+.idea
+/*.iml

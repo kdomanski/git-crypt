@@ -3,6 +3,8 @@ use libc::{c_char, c_int};
 
 extern crate getopts;
 
+mod key;
+
 use std::env;
 use std::ffi::CString;
 
