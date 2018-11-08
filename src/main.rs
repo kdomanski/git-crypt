@@ -3,12 +3,15 @@ use libc::{c_char, c_int};
 
 extern crate getopts;
 
+mod commands;
+mod git;
 mod key;
 
 use std::env;
 use std::ffi::CString;
 
 #[link(name = "crypto", kind = "static")]
+#[link(name = "ssl", kind = "static")]
 #[link(name = "gitcrypt")]
 extern "C" {
     fn cpp_main(argc: c_int, argv: *const *const c_char) -> c_int;
@@ -90,14 +93,15 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let cmd_args = remaining_args.map(|a| a.clone()).collect();
+    let mut cmd_args = remaining_args.map(|a| a.clone()).collect();
 
     match cmd.as_ref() {
         "version" => print_version(&mut std::io::stderr()),
         "help" => help(cmd_args),
+        "smudge" => commands::smudge(cmd_args),
         _ => {
             let mut args: Vec<String> = vec![std::env::args().nth(0).unwrap(), cmd.clone()];
-            args.append(&mut matches.free.clone());
+            args.append(&mut cmd_args);
 
             let cs_args = args
                 .iter()

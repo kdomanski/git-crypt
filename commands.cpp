@@ -844,43 +844,6 @@ static int decrypt_file_to_stdout (const Key_file& key_file, const unsigned char
 	return 0;
 }
 
-// Decrypt contents of stdin and write to stdout
-int smudge (int argc, const char** argv)
-{
-	const char*		key_name = 0;
-	const char*		key_path = 0;
-	const char*		legacy_key_path = 0;
-
-	int			argi = parse_plumbing_options(&key_name, &key_path, argc, argv);
-	if (argc - argi == 0) {
-	} else if (!key_name && !key_path && argc - argi == 1) { // Deprecated - for compatibility with pre-0.4
-		legacy_key_path = argv[argi];
-	} else {
-		std::clog << "Usage: git-crypt smudge [--key-name=NAME] [--key-file=PATH]" << std::endl;
-		return 2;
-	}
-	Key_file		key_file;
-	load_key(key_file, key_name, key_path, legacy_key_path);
-
-	// Read the header to get the nonce and make sure it's actually encrypted
-	unsigned char		header[10 + Aes_ctr_decryptor::NONCE_LEN];
-	std::cin.read(reinterpret_cast<char*>(header), sizeof(header));
-	if (std::cin.gcount() != sizeof(header) || std::memcmp(header, "\0GITCRYPT\0", 10) != 0) {
-		// File not encrypted - just copy it out to stdout
-		std::clog << "git-crypt: Warning: file not encrypted" << std::endl;
-		std::clog << "git-crypt: Run 'git-crypt status' to make sure all files are properly encrypted." << std::endl;
-		std::clog << "git-crypt: If 'git-crypt status' reports no problems, then an older version of" << std::endl;
-		std::clog << "git-crypt: this file may be unencrypted in the repository's history.  If this" << std::endl;
-		std::clog << "git-crypt: file contains sensitive information, you can use 'git filter-branch'" << std::endl;
-		std::clog << "git-crypt: to remove its old versions from the history." << std::endl;
-		std::cout.write(reinterpret_cast<char*>(header), std::cin.gcount()); // include the bytes which we already read
-		std::cout << std::cin.rdbuf();
-		return 0;
-	}
-
-	return decrypt_file_to_stdout(key_file, header, std::cin);
-}
-
 int diff (int argc, const char** argv)
 {
 	const char*		key_name = 0;

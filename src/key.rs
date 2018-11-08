@@ -46,7 +46,7 @@ impl std::fmt::Display for Error {
 }
 
 pub struct Entry {
-    version: u32,
+    pub version: u32,
     pub aes_key: [u8; AES_KEY_LEN],
     pub hmac_key: [u8; HMAC_KEY_LEN],
 }

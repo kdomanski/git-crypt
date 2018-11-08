@@ -12,7 +12,7 @@ fn main() {
         .file("parse_options.cpp")
         .file("fhstream.cpp")
         //.file("util-unix.cpp")
-        .file("crypto-openssl-10.cpp")
+        .file("crypto-openssl-11.cpp")
         .cpp(true)
         .compile("libgitcrypt.a");
 }
