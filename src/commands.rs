@@ -13,14 +13,18 @@ const NONCE_LEN: usize = 12;
 
 fn parse_plumbing_options(
     args: Vec<String>,
-) -> Result<(Option<String>, Option<String>), getopts::Fail> {
+) -> Result<(Option<String>, Option<String>, Vec<String>), getopts::Fail> {
     let mut opts = getopts::Options::new();
     opts.optopt("k", "key-name", "key name", "KEYNAME");
     opts.optopt("", "key-file", "key path", "KEY_FILE_PATH");
 
     let matches = opts.parse(args.clone())?;
 
-    Ok((matches.opt_str("key-name"), matches.opt_str("key-file")))
+    Ok((
+        matches.opt_str("key-name"),
+        matches.opt_str("key-file"),
+        matches.free,
+    ))
 }
 
 // Decrypt contents of stdin and write to stdout
@@ -32,7 +36,7 @@ pub fn smudge(args: Vec<String>) {
 }
 
 fn smudge_run(args: Vec<String>) -> std::io::Result<()> {
-    let (key_name, key_file) = match parse_plumbing_options(args) {
+    let (key_name, key_file, _remaining_args) = match parse_plumbing_options(args) {
         Ok(o) => o,
         Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
     };
@@ -60,6 +64,45 @@ fn smudge_run(args: Vec<String>) -> std::io::Result<()> {
     } else {
         decrypt_file_to_stdout(&key, header, &mut std::io::stdin())
     }
+}
+
+pub fn diff(args: Vec<String>) {
+    if let Err(e) = diff_run(args) {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    }
+}
+
+fn diff_run(args: Vec<String>) -> std::io::Result<()> {
+    let (key_name, key_file, remaining_args) = match parse_plumbing_options(args) {
+        Ok(o) => o,
+        Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
+    };
+
+    if remaining_args.len() != 1 {
+        return Err(Error::new(
+            ErrorKind::Other,
+            format!(
+                "'git-crypt diff' requires 1 positional argument, got {}",
+                remaining_args.len()
+            ),
+        ));
+    }
+
+    let key = load_key(key_name, key_file)?;
+    let mut file = std::fs::File::open(remaining_args.first().unwrap())?;
+
+    // Read the header to get the nonce and determine if it's actually encrypted
+    let mut header: [u8; 10 + NONCE_LEN] = [0; 10 + NONCE_LEN];
+    if file.read(&mut header)? != header.len() || !header[..10].iter().eq("\0GITCRYPT\0".as_bytes())
+    {
+        // File not encrypted - just copy it out to stdout
+        std::io::stdout().write(&header[..])?;
+        std::io::copy(&mut file, &mut std::io::stdout())?;
+        return Ok(());
+    }
+
+    decrypt_file_to_stdout(&key, header, &mut file)
 }
 
 fn decrypt_file_to_stdout(

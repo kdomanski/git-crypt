@@ -90,8 +90,6 @@ public:
 	static void process_stream (std::istream& in, std::ostream& out, const unsigned char* key, const unsigned char* nonce);
 };
 
-typedef Aes_ctr_encryptor Aes_ctr_decryptor;
-
 class Hmac_sha1_state {
 public:
 	enum {

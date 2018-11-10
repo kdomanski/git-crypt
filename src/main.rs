@@ -99,6 +99,7 @@ fn main() {
         "version" => print_version(&mut std::io::stderr()),
         "help" => help(cmd_args),
         "smudge" => commands::smudge(cmd_args),
+        "diff" => commands::diff(cmd_args),
         _ => {
             let mut args: Vec<String> = vec![std::env::args().nth(0).unwrap(), cmd.clone()];
             args.append(&mut cmd_args);

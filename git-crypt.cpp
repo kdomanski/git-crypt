@@ -138,9 +138,6 @@ try {
 		if (std::strcmp(command, "clean") == 0) {
 			return clean(argc, argv);
 		}
-		if (std::strcmp(command, "diff") == 0) {
-			return diff(argc, argv);
-		}
 	} catch (const Option_error& e) {
 		std::clog << "git-crypt: Error: " << e.option_name << ": " << e.message << std::endl;
 		//help_for_command(command, std::clog);

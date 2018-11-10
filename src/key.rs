@@ -289,9 +289,7 @@ impl KeyFile {
 
         out.extend_from_slice(u32_to_be(HEADER_FIELD_END).as_ref());
 
-        self.entries
-            .values()
-            .for_each(|e| out.extend(e.store()));
+        self.entries.values().for_each(|e| out.extend(e.store()));
 
         out
     }
@@ -354,6 +352,21 @@ mod tests {
 
     use super::*;
 
+    const TEST_KEY_DATA_BASE64: &str = "AEdJVENSWVBUS0VZAAAAAgAAAAAAAAABAAAABAAAAAAAAAADAAAAIIp/9dSNepfSiCJY0R6oL0WZdvGOFkGZhU0smvj7RAgyAAAABQAAAEDNBuigXTPrwErydfFRgUFm6VG3Rfxoxl9kUqWIU7serT/VOmwNf92uyANWfkn+eb1MlVn31XJPBv0C3Y80YTatAAAAAA==";
+    const TEST_KEY_AES: [u8; AES_KEY_LEN] = [
+        0x8a, 0x7f, 0xf5, 0xd4, 0x8d, 0x7a, 0x97, 0xd2, 0x88, 0x22, 0x58, 0xd1, 0x1e, 0xa8, 0x2f,
+        0x45, 0x99, 0x76, 0xf1, 0x8e, 0x16, 0x41, 0x99, 0x85, 0x4d, 0x2c, 0x9a, 0xf8, 0xfb, 0x44,
+        0x08, 0x32,
+    ];
+    const TEST_KEY_HMAC: [u8; HMAC_KEY_LEN] = [
+        0xcd, 0x06, 0xe8, 0xa0, 0x5d, 0x33, 0xeb, 0xc0, 0x4a, 0xf2, 0x75, 0xf1, 0x51, 0x81, 0x41,
+        0x66, 0xe9, 0x51, 0xb7, 0x45, 0xfc, 0x68, 0xc6, 0x5f, 0x64, 0x52, 0xa5, 0x88, 0x53, 0xbb,
+        0x1e, 0xad, 0x3f, 0xd5, 0x3a, 0x6c, 0x0d, 0x7f, 0xdd, 0xae, 0xc8, 0x03, 0x56, 0x7e, 0x49,
+        0xfe, 0x79, 0xbd, 0x4c, 0x95, 0x59, 0xf7, 0xd5, 0x72, 0x4f, 0x06, 0xfd, 0x02, 0xdd, 0x8f,
+        0x34, 0x61, 0x36, 0xad,
+    ];
+    const TEST_KEY_VERSION: u32 = 0;
+
     #[test]
     fn test_validate_key_name() {
         validate_key_name("some_key-name").expect("expected successful validation");
@@ -367,12 +380,19 @@ mod tests {
 
     #[test]
     fn test_load_store_key() {
-        let test_key_data_base64 = "AEdJVENSWVBUS0VZAAAAAgAAAAAAAAABAAAABAAAAAAAAAADAAAAIIp/9dSNepfSiCJY0R6oL0WZdvGOFkGZhU0smvj7RAgyAAAABQAAAEDNBuigXTPrwErydfFRgUFm6VG3Rfxoxl9kUqWIU7serT/VOmwNf92uyANWfkn+eb1MlVn31XJPBv0C3Y80YTatAAAAAA==";
         let test_key_data =
-            base64::decode(test_key_data_base64.as_bytes()).expect("decoding base64 failed");
+            base64::decode(TEST_KEY_DATA_BASE64.as_bytes()).expect("decoding base64 failed");
 
         let key = KeyFile::from_bytes(test_key_data.as_slice())
             .expect("expected the key to load successfully");
+
+        assert_eq!(key.key_name, None);
+        assert_eq!(key.entries.len(), 1);
+        assert!(key.entries.contains_key(&0));
+        assert_eq!(TEST_KEY_VERSION, key.entries[&0].version);
+        assert_eq!(TEST_KEY_AES, key.entries[&0].aes_key);
+        assert_eq!(TEST_KEY_HMAC[..], key.entries[&0].hmac_key[..]);
+
         let stored_data = key.store();
 
         assert!(stored_data.iter().eq(test_key_data.iter()));
