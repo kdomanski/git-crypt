@@ -35,9 +35,6 @@
 #include "crypto.hpp"
 #include "key.hpp"
 #include "util.hpp"
-#include <openssl/aes.h>
-#include <openssl/sha.h>
-#include <openssl/hmac.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/err.h>
@@ -48,61 +45,6 @@ void init_crypto ()
 {
 	ERR_load_crypto_strings();
 }
-
-struct Aes_ecb_encryptor::Aes_impl {
-	AES_KEY key;
-};
-
-Aes_ecb_encryptor::Aes_ecb_encryptor (const unsigned char* raw_key)
-: impl(new Aes_impl)
-{
-	if (AES_set_encrypt_key(raw_key, KEY_LEN * 8, &(impl->key)) != 0) {
-		throw Crypto_error("Aes_ctr_encryptor::Aes_ctr_encryptor", "AES_set_encrypt_key failed");
-	}
-}
-
-Aes_ecb_encryptor::~Aes_ecb_encryptor ()
-{
-	// Note: Explicit destructor necessary because class contains an unique_ptr
-	// which contains an incomplete type when the unique_ptr is declared.
-
-	explicit_memset(&impl->key, '\0', sizeof(impl->key));
-}
-
-void Aes_ecb_encryptor::encrypt(const unsigned char* plain, unsigned char* cipher)
-{
-	AES_encrypt(plain, cipher, &(impl->key));
-}
-
-struct Hmac_sha1_state::Hmac_impl {
-	HMAC_CTX ctx;
-};
-
-Hmac_sha1_state::Hmac_sha1_state (const unsigned char* key, size_t key_len)
-: impl(new Hmac_impl)
-{
-	HMAC_Init(&(impl->ctx), key, key_len, EVP_sha1());
-}
-
-Hmac_sha1_state::~Hmac_sha1_state ()
-{
-	// Note: Explicit destructor necessary because class contains an unique_ptr
-	// which contains an incomplete type when the unique_ptr is declared.
-
-	HMAC_cleanup(&(impl->ctx));
-}
-
-void Hmac_sha1_state::add (const unsigned char* buffer, size_t buffer_len)
-{
-	HMAC_Update(&(impl->ctx), buffer, buffer_len);
-}
-
-void Hmac_sha1_state::get (unsigned char* digest)
-{
-	unsigned int len;
-	HMAC_Final(&(impl->ctx), digest, &len);
-}
-
 
 void random_bytes (unsigned char* buffer, size_t len)
 {

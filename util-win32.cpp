@@ -58,41 +58,6 @@ std::string System_error::message () const
 	return mesg;
 }
 
-void	temp_fstream::open (std::ios_base::openmode mode)
-{
-	close();
-
-	char			tmpdir[MAX_PATH + 1];
-
-	DWORD			ret = GetTempPath(sizeof(tmpdir), tmpdir);
-	if (ret == 0) {
-		throw System_error("GetTempPath", "", GetLastError());
-	} else if (ret > sizeof(tmpdir) - 1) {
-		throw System_error("GetTempPath", "", ERROR_BUFFER_OVERFLOW);
-	}
-
-	char			tmpfilename[MAX_PATH + 1];
-	if (GetTempFileName(tmpdir, TEXT("git-crypt"), 0, tmpfilename) == 0) {
-		throw System_error("GetTempFileName", "", GetLastError());
-	}
-
-	filename = tmpfilename;
-
-	std::fstream::open(filename.c_str(), mode);
-	if (!std::fstream::is_open()) {
-		DeleteFile(filename.c_str());
-		throw System_error("std::fstream::open", filename, 0);
-	}
-}
-
-void	temp_fstream::close ()
-{
-	if (std::fstream::is_open()) {
-		std::fstream::close();
-		DeleteFile(filename.c_str());
-	}
-}
-
 void	mkdir_parent (const std::string& path)
 {
 	std::string::size_type		slash(path.find('/', 1));

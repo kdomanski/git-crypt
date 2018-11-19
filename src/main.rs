@@ -2,6 +2,7 @@ extern crate libc;
 use libc::{c_char, c_int};
 
 extern crate getopts;
+extern crate tempfile;
 
 mod commands;
 mod git;
@@ -100,6 +101,7 @@ fn main() {
         "help" => help(cmd_args),
         "smudge" => commands::smudge(cmd_args),
         "diff" => commands::diff(cmd_args),
+        "clean" => commands::clean(cmd_args),
         _ => {
             let mut args: Vec<String> = vec![std::env::args().nth(0).unwrap(), cmd.clone()];
             args.append(&mut cmd_args);
@@ -112,6 +114,7 @@ fn main() {
                 .iter()
                 .map(|arg| arg.as_ptr())
                 .collect::<Vec<*const c_char>>();
+
             unsafe {
                 let return_code = cpp_main(args.len() as c_int, c_args.as_ptr());
                 std::process::exit(return_code);

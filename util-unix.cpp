@@ -60,46 +60,6 @@ std::string System_error::message () const
 	return mesg;
 }
 
-void	temp_fstream::open (std::ios_base::openmode mode)
-{
-	close();
-
-	const char*		tmpdir = getenv("TMPDIR");
-	size_t			tmpdir_len = tmpdir ? std::strlen(tmpdir) : 0;
-	if (tmpdir_len == 0 || tmpdir_len > 4096) {
-		// no $TMPDIR or it's excessively long => fall back to /tmp
-		tmpdir = "/tmp";
-		tmpdir_len = 4;
-	}
-	std::vector<char>	path_buffer(tmpdir_len + 18);
-	char*			path = &path_buffer[0];
-	std::strcpy(path, tmpdir);
-	std::strcpy(path + tmpdir_len, "/git-crypt.XXXXXX");
-	mode_t			old_umask = umask(0077);
-	int			fd = mkstemp(path);
-	if (fd == -1) {
-		int		mkstemp_errno = errno;
-		umask(old_umask);
-		throw System_error("mkstemp", "", mkstemp_errno);
-	}
-	umask(old_umask);
-	std::fstream::open(path, mode);
-	if (!std::fstream::is_open()) {
-		unlink(path);
-		::close(fd);
-		throw System_error("std::fstream::open", path, 0);
-	}
-	unlink(path);
-	::close(fd);
-}
-
-void	temp_fstream::close ()
-{
-	if (std::fstream::is_open()) {
-		std::fstream::close();
-	}
-}
-
 void	mkdir_parent (const std::string& path)
 {
 	std::string::size_type		slash(path.find('/', 1));

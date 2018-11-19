@@ -49,15 +49,6 @@ struct System_error {
 	std::string message () const;
 };
 
-class temp_fstream : public std::fstream {
-	std::string	filename;
-public:
-	~temp_fstream () { close(); }
-
-	void		open (std::ios_base::openmode);
-	void		close ();
-};
-
 void		mkdir_parent (const std::string& path); // Create parent directories of path, __but not path itself__
 std::string	our_exe_path ();
 int		exec_command (const std::vector<std::string>&);

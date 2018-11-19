@@ -293,6 +293,19 @@ impl KeyFile {
 
         out
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn get_latest(&self) -> Option<&Entry> {
+        if self.is_empty() {
+            return None;
+        }
+
+        let latest_version = self.entries.keys().into_iter().max().unwrap();
+        return Some(&self.entries[latest_version]);
+    }
 }
 
 pub fn validate_key_name(key_name: &str) -> std::io::Result<()> {
@@ -402,5 +415,50 @@ mod tests {
         let stored_data = key.store();
 
         assert!(stored_data.as_slice().eq(&TEST_KEY_DATA[..]));
+    }
+
+    #[test]
+    fn test_get_latest() {
+        let mut k = KeyFile::new();
+        k.entries.insert(
+            0,
+            Entry {
+                version: 0,
+                aes_key: [0; AES_KEY_LEN],
+                hmac_key: [0; HMAC_KEY_LEN],
+            },
+        );
+        k.entries.insert(
+            1,
+            Entry {
+                version: 1,
+                aes_key: [0; AES_KEY_LEN],
+                hmac_key: [0; HMAC_KEY_LEN],
+            },
+        );
+
+        assert_eq!(k.get_latest().unwrap().version, 1);
+
+        k.entries.insert(
+            5,
+            Entry {
+                version: 5,
+                aes_key: [0; AES_KEY_LEN],
+                hmac_key: [0; HMAC_KEY_LEN],
+            },
+        );
+
+        assert_eq!(k.get_latest().unwrap().version, 5);
+
+        k.entries.insert(
+            3,
+            Entry {
+                version: 3,
+                aes_key: [0; AES_KEY_LEN],
+                hmac_key: [0; HMAC_KEY_LEN],
+            },
+        );
+
+        assert_eq!(k.get_latest().unwrap().version, 5);
     }
 }
