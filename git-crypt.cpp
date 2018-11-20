@@ -128,9 +128,6 @@ try {
 		if (std::strcmp(command, "migrate-key") == 0) {
 			return migrate_key(argc, argv);
 		}
-		if (std::strcmp(command, "refresh") == 0) {
-			return refresh(argc, argv);
-		}
 		if (std::strcmp(command, "status") == 0) {
 			return status(argc, argv);
 		}

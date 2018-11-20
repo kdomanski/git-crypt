@@ -294,6 +294,10 @@ fn encrypt_stream(
     Ok(())
 }
 
+pub fn refresh(_args: Vec<String>) {
+    unimplemented!("refresh");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

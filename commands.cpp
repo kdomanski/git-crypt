@@ -1148,12 +1148,6 @@ int migrate_key (int argc, const char** argv)
 	return 0;
 }
 
-int refresh (int argc, const char** argv) // TODO: do a force checkout, much like in unlock
-{
-	std::clog << "Error: refresh is not yet implemented." << std::endl;
-	return 1;
-}
-
 int status (int argc, const char** argv)
 {
 	// Usage:
