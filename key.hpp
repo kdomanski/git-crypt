@@ -52,7 +52,6 @@ public:
 		Entry ();
 
 		void			load (std::istream&);
-		void			load_legacy (uint32_t version, std::istream&);
 		void			store (std::ostream&) const;
 		void			generate (uint32_t version);
 	};
@@ -65,7 +64,6 @@ public:
 	const Entry*			get (uint32_t version) const;
 	void				add (const Entry&);
 
-	void				load_legacy (std::istream&);
 	void				load (std::istream&);
 	void				store (std::ostream&) const;
 

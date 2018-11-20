@@ -564,15 +564,9 @@ static void get_encrypted_files (std::vector<std::string>& files, const char* ke
 	}
 }
 
-static void load_key (Key_file& key_file, const char* key_name, const char* key_path =0, const char* legacy_path =0)
+static void load_key (Key_file& key_file, const char* key_name, const char* key_path =0)
 {
-	if (legacy_path) {
-		std::ifstream		key_file_in(legacy_path, std::fstream::binary);
-		if (!key_file_in) {
-			throw Error(std::string("Unable to open key file: ") + legacy_path);
-		}
-		key_file.load_legacy(key_file_in);
-	} else if (key_path) {
+	if (key_path) {
 		std::ifstream		key_file_in(key_path, std::fstream::binary);
 		if (!key_file_in) {
 			throw Error(std::string("Unable to open key file: ") + key_path);
@@ -772,8 +766,6 @@ int unlock (int argc, const char** argv)
 				return 1;
 			} catch (Key_file::Malformed) {
 				std::clog << "Error: " << symmetric_key_file << ": not a valid git-crypt key file" << std::endl;
-				std::clog << "If this key was created prior to git-crypt 0.4, you need to migrate it" << std::endl;
-				std::clog << "by running 'git-crypt migrate-key /path/to/old_key /path/to/migrated_key'." << std::endl;
 				return 1;
 			}
 
@@ -1105,46 +1097,6 @@ int keygen (int argc, const char** argv)
 			return 1;
 		}
 	}
-	return 0;
-}
-
-int migrate_key (int argc, const char** argv)
-{
-	if (argc != 2) {
-		std::clog << "Error: filenames not specified" << std::endl;
-		help_migrate_key();
-		return 2;
-	}
-
-	const char*		key_file_name = argv[0];
-	const char*		new_key_file_name = argv[1];
-	Key_file		key_file;
-
-	try {
-		if (std::strcmp(key_file_name, "-") == 0) {
-			key_file.load_legacy(std::cin);
-		} else {
-			std::ifstream	in(key_file_name, std::fstream::binary);
-			if (!in) {
-				std::clog << "Error: " << key_file_name << ": unable to open for reading" << std::endl;
-				return 1;
-			}
-			key_file.load_legacy(in);
-		}
-
-		if (std::strcmp(new_key_file_name, "-") == 0) {
-			key_file.store(std::cout);
-		} else {
-			if (!key_file.store_to_file(new_key_file_name)) {
-				std::clog << "Error: " << new_key_file_name << ": unable to write key file" << std::endl;
-				return 1;
-			}
-		}
-	} catch (Key_file::Malformed) {
-		std::clog << "Error: " << key_file_name << ": not a valid legacy git-crypt key file" << std::endl;
-		return 1;
-	}
-
 	return 0;
 }
 

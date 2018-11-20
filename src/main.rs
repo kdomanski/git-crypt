@@ -42,7 +42,6 @@ fn print_usage(out: &mut std::io::Write, arg0: String) {
     s += "Legacy commands:\n";
     s += "  init KEYFILE         alias for 'unlock KEYFILE'\n";
     s += "  keygen KEYFILE       generate a git-crypt key in the given file\n";
-    s += "  migrate-key OLD NEW  migrate the legacy key file OLD to the new format in NEW\n";
     /*
 	s += std::endl;
 	s += "Plumbing commands (not to be used directly):\n";
@@ -157,7 +156,6 @@ fn help_for_command(command: String) -> bool {
         "ls-gpg-users" => help_ls_gpg_users(),
         "export-key" => help_export_key(),
         "keygen" => help_keygen(),
-        "migrate-key" => help_migrate_key(),
         "refresh" => help_refresh(),
         "status" => help_status(),
         _ => return false,
@@ -236,14 +234,6 @@ pub extern "C" fn help_keygen() {
     eprint!("Usage: git-crypt keygen FILENAME\n");
     eprint!("\n");
     eprint!("When FILENAME is -, write to standard out.\n");
-}
-
-#[no_mangle]
-pub extern "C" fn help_migrate_key() {
-    //     |--------------------------------------------------------------------------------| 80 chars
-    eprint!("Usage: git-crypt migrate-key OLDFILENAME NEWFILENAME\n");
-    eprint!("\n");
-    eprint!("Use - to read from standard in/write to standard out.\n");
 }
 
 #[no_mangle]

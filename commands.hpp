@@ -40,8 +40,6 @@ struct Error {
 	explicit Error (std::string m) : message(m) { }
 };
 
-// Plumbing commands:
-int clean (int argc, const char** argv);
 // Public commands:
 int init (int argc, const char** argv);
 int unlock (int argc, const char** argv);
@@ -51,8 +49,6 @@ int rm_gpg_user (int argc, const char** argv);
 int ls_gpg_users (int argc, const char** argv);
 int export_key (int argc, const char** argv);
 int keygen (int argc, const char** argv);
-int migrate_key (int argc, const char** argv);
-int refresh (int argc, const char** argv);
 int status (int argc, const char** argv);
 
 // Help messages:
@@ -64,7 +60,6 @@ extern "C" void help_rm_gpg_user ();
 extern "C" void help_ls_gpg_users ();
 extern "C" void help_export_key ();
 extern "C" void help_keygen ();
-extern "C" void help_migrate_key ();
 extern "C" void help_refresh ();
 extern "C" void help_status ();
 

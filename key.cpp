@@ -102,30 +102,6 @@ void		Key_file::Entry::load (std::istream& in)
 	}
 }
 
-void		Key_file::Entry::load_legacy (uint32_t arg_version, std::istream& in)
-{
-	version = arg_version;
-
-	// First comes the AES key
-	in.read(reinterpret_cast<char*>(aes_key), AES_KEY_LEN);
-	if (in.gcount() != AES_KEY_LEN) {
-		throw Malformed();
-	}
-
-	// Then the HMAC key
-	in.read(reinterpret_cast<char*>(hmac_key), HMAC_KEY_LEN);
-	if (in.gcount() != HMAC_KEY_LEN) {
-		throw Malformed();
-	}
-
-	if (in.peek() != -1) {
-		// Trailing data is a good indication that we are not actually reading a
-		// legacy key file.  (This is important to check since legacy key files
-		// did not have any sort of file header.)
-		throw Malformed();
-	}
-}
-
 void		Key_file::Entry::store (std::ostream& out) const
 {
 	// Version
@@ -168,12 +144,6 @@ const Key_file::Entry*	Key_file::get (uint32_t version) const
 void		Key_file::add (const Entry& entry)
 {
 	entries[entry.version] = entry;
-}
-
-
-void		Key_file::load_legacy (std::istream& in)
-{
-	entries[0].load_legacy(0, in);
 }
 
 void		Key_file::load (std::istream& in)
