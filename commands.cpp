@@ -1011,12 +1011,6 @@ int add_gpg_user (int argc, const char** argv)
 	return 0;
 }
 
-int rm_gpg_user (int argc, const char** argv) // TODO
-{
-	std::clog << "Error: rm-gpg-user is not yet implemented." << std::endl;
-	return 1;
-}
-
 int ls_gpg_users (int argc, const char** argv) // TODO
 {
 	// Sketch:

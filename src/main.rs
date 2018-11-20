@@ -102,6 +102,7 @@ fn main() {
         "diff" => commands::diff(cmd_args),
         "clean" => commands::clean(cmd_args),
         "refresh" => commands::refresh(cmd_args),
+        "rm-gpg-user" => commands::rm_gpg_user(cmd_args),
         _ => {
             let mut args: Vec<String> = vec![std::env::args().nth(0).unwrap(), cmd.clone()];
             args.append(&mut cmd_args);

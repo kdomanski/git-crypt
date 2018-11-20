@@ -298,6 +298,10 @@ pub fn refresh(_args: Vec<String>) {
     unimplemented!("refresh");
 }
 
+pub fn rm_gpg_user(_args: Vec<String>) {
+    unimplemented!("rm-gpg-user");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
