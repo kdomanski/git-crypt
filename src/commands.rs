@@ -1,6 +1,7 @@
 use std::io::Seek;
 use std::io::{Error, ErrorKind};
 use std::io::{Read, Write};
+use std::path::Path;
 
 extern crate crypto;
 use commands::crypto::hmac::Hmac;
@@ -46,7 +47,11 @@ fn smudge_run(args: Vec<String>) -> std::io::Result<()> {
         Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
     };
 
-    let key = load_key(key_name, key_file)?;
+    let key = if let Some(kf) = key_file {
+        load_key_from_path(&Path::new(kf.as_str()))
+    } else {
+        load_key_from_repo(key_name, ::std::env::current_dir()?.as_path())
+    }?;
 
     let mut header: [u8; 10 + NONCE_LEN] = [0; 10 + NONCE_LEN];
     if std::io::stdin().read(&mut header)? != header.len()
@@ -94,7 +99,11 @@ fn diff_run(args: Vec<String>) -> std::io::Result<()> {
         ));
     }
 
-    let key = load_key(key_name, key_file)?;
+    let key = if let Some(kf) = key_file {
+        load_key_from_path(&Path::new(kf.as_str()))
+    } else {
+        load_key_from_repo(key_name, ::std::env::current_dir()?.as_path())
+    }?;
     let mut file = std::fs::File::open(remaining_args.first().unwrap())?;
 
     // Read the header to get the nonce and determine if it's actually encrypted
@@ -155,12 +164,20 @@ fn decrypt_file_to_stream(
     Ok(())
 }
 
-fn load_key(key_name: Option<String>, key_path: Option<String>) -> std::io::Result<::key::KeyFile> {
-    let path = key_path.unwrap_or(::git::get_internal_key_path(
-        key_name.as_ref().map(|x| x.as_str()),
-    )?);
+fn load_key_from_path(key_path: &Path) -> std::io::Result<::key::KeyFile> {
+    match ::key::KeyFile::from_file(key_path) {
+        Ok(o) => Ok(o),
+        Err(e) => Err(Error::new(
+            ErrorKind::Other,
+            format!("cannot read key from the given path: {}", e),
+        )),
+    }
+}
 
-    match ::key::KeyFile::from_file(path.as_str()) {
+fn load_key_from_repo(key_name: Option<String>, repo: &Path) -> std::io::Result<::key::KeyFile> {
+    let path = ::git::get_internal_key_path(repo, key_name.as_ref().map(|x| x.as_str()))?;
+
+    match ::key::KeyFile::from_file(&path.as_path()) {
         Ok(o) => Ok(o),
         Err(e) => Err(Error::new(
             ErrorKind::Other,
@@ -183,7 +200,11 @@ fn clean_run(args: Vec<String>) -> std::io::Result<()> {
         Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
     };
 
-    let key = load_key(key_name, key_file)?;
+    let key = if let Some(kf) = key_file {
+        load_key_from_path (&Path::new(kf.as_str()))
+    } else {
+        load_key_from_repo(key_name, ::std::env::current_dir()?.as_path())
+    }?;
 
     encrypt_stream(&key, &mut std::io::stdin(), &mut std::io::stdout())?;
     Ok(())
@@ -300,6 +321,24 @@ pub fn refresh(_args: Vec<String>) {
 
 pub fn rm_gpg_user(_args: Vec<String>) {
     unimplemented!("rm-gpg-user");
+}
+
+pub fn ls_gpg_users(_args: Vec<String>) {
+    // Sketch:
+    // Scan the sub-directories in .git-crypt/keys, outputting something like this:
+    // ====
+    // Key version 0:
+    //  0x143DE9B3F7316900 Andrew Ayer <andrew@example.com>
+    //  0x4E386D9C9C61702F ???
+    // Key version 1:
+    //  0x143DE9B3F7316900 Andrew Ayer <andrew@example.com>
+    //  0x1727274463D27F40 John Smith <smith@example.com>
+    //  0x4E386D9C9C61702F ???
+    // ====
+    // To resolve a long hex ID, use a command like this:
+    //  gpg --options /dev/null --fixed-list-mode --batch --with-colons --list-keys 0x143DE9B3F7316900
+
+    unimplemented!("ls-gpg-users");
 }
 
 #[cfg(test)]

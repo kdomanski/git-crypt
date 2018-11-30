@@ -182,7 +182,7 @@ impl KeyFile {
         }
     }
 
-    pub fn from_file(path: &str) -> Result<KeyFile, Error> {
+    pub fn from_file(path: &::std::path::Path) -> Result<KeyFile, Error> {
         let mut file = std::fs::File::open(path)?;
 
         let mut contents = Vec::new();
@@ -249,7 +249,7 @@ impl KeyFile {
                         Err(_) => {
                             return Err(Error::Malformed(
                                 "could not convert key name to UTF-8 string".to_string(),
-                            ))
+                            ));
                         }
                     };
                 }

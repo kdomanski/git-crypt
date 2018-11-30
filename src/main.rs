@@ -93,7 +93,11 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let mut cmd_args = remaining_args.map(|a| a.clone()).collect();
+    let cmd_args = remaining_args.map(|a| a.clone()).collect();
+    let working_dir = ::std::env::current_dir().unwrap_or_else(|e| {
+        eprintln!("Failed to get working directory: {}", e);
+        std::process::exit(1);
+    });
 
     match cmd.as_ref() {
         "version" => print_version(&mut std::io::stderr()),
@@ -103,31 +107,40 @@ fn main() {
         "clean" => commands::clean(cmd_args),
         "refresh" => commands::refresh(cmd_args),
         "rm-gpg-user" => commands::rm_gpg_user(cmd_args),
-        _ => {
-            let mut args: Vec<String> = vec![std::env::args().nth(0).unwrap(), cmd.clone()];
-            args.append(&mut cmd_args);
-
-            let cs_args = args
-                .iter()
-                .map(|arg| CString::new(arg.as_bytes()).unwrap())
-                .collect::<Vec<CString>>();
-            let c_args = cs_args
-                .iter()
-                .map(|arg| arg.as_ptr())
-                .collect::<Vec<*const c_char>>();
-
-            unsafe {
-                let return_code = cpp_main(args.len() as c_int, c_args.as_ptr());
-                std::process::exit(return_code);
-            };
-        }
-    }
+        "ls-gpg-users" => commands::ls_gpg_users(cmd_args),
+        //"lock" => commands::lock(cmd_args)
+        //"unlock" => commands::unlock(cmd_args),
+        _ => {run_c_with_args(cpp_main,  cmd,cmd_args);},
+    };
 
     // catch (const Option_error& e) {
     // 	std::clog << "git-crypt: Error: " << e.option_name << ": " << e.message << std::endl;
     // 	help_for_command(command, std::clog);
     // 	return 2;
     // }
+}
+
+fn run_c_with_args(
+    f: unsafe extern "C" fn(argc: c_int, argv: *const *const c_char) -> i32,
+    cmd: &str,
+    mut cmd_args: Vec<String>,
+) {
+    let mut args: Vec<String> = vec![std::env::args().nth(0).unwrap(), cmd.to_string()];
+    args.append(&mut cmd_args);
+
+    let cs_args = args
+        .iter()
+        .map(|arg| CString::new(arg.as_bytes()).unwrap())
+        .collect::<Vec<CString>>();
+    let c_args = cs_args
+        .iter()
+        .map(|arg| arg.as_ptr())
+        .collect::<Vec<*const c_char>>();
+
+    unsafe {
+        let return_code = f(args.len() as c_int, c_args.as_ptr());
+        std::process::exit(return_code);
+    }
 }
 
 fn help(args: Vec<String>) {

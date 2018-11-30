@@ -1,18 +1,22 @@
 use std::io::BufRead;
 use std::io::{Error, ErrorKind};
 
-fn get_internal_state_path() -> std::io::Result<String> {
+fn get_internal_state_path(repo: &std::path::Path) -> std::io::Result<::std::path::PathBuf> {
     // git rev-parse --git-dir
     // git config --get NAME
     let output = std::process::Command::new("git")
         .arg("rev-parse")
         .arg("--git-dir")
+        .current_dir(repo)
         .output()?;
     if output.status.success() {
         let mut b = std::io::BufReader::new(&output.stdout[..]);
         let mut buf = String::new();
         b.read_line(&mut buf)?;
-        Ok(format!("{}/git-crypt", buf.trim()))
+        Ok(::std::path::PathBuf::from(format!(
+            "{}/git-crypt",
+            buf.trim()
+        )))
     } else {
         Err(Error::new(
             ErrorKind::Other,
@@ -21,17 +25,22 @@ fn get_internal_state_path() -> std::io::Result<String> {
     }
 }
 
-fn get_internal_keys_path(internal_state_path: Option<&str>) -> std::io::Result<String> {
-    Ok(format!(
-        "{}/keys",
-        internal_state_path.unwrap_or(get_internal_state_path()?.as_str())
-    ))
+fn get_internal_keys_path(
+    repo: &::std::path::Path,
+    internal_state_path: Option<&std::path::Path>,
+) -> std::io::Result<std::path::PathBuf> {
+    let mut isp: std::path::PathBuf = internal_state_path
+        .map(|x: &std::path::Path| x.to_path_buf())
+        .unwrap_or(get_internal_state_path(repo)?);
+    isp.push("keys");
+    Ok(isp)
 }
 
-pub fn get_internal_key_path(key_name: Option<&str>) -> std::io::Result<String> {
-    Ok(format!(
-        "{}/{}",
-        get_internal_keys_path(None)?,
-        key_name.unwrap_or("default")
-    ))
+pub fn get_internal_key_path(
+    repo: &::std::path::Path,
+    key_name: Option<&str>,
+) -> std::io::Result<std::path::PathBuf> {
+    let mut ikp = get_internal_keys_path(repo, None)?;
+    ikp.push(key_name.unwrap_or("default"));
+    Ok(ikp)
 }

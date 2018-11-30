@@ -1011,26 +1011,6 @@ int add_gpg_user (int argc, const char** argv)
 	return 0;
 }
 
-int ls_gpg_users (int argc, const char** argv) // TODO
-{
-	// Sketch:
-	// Scan the sub-directories in .git-crypt/keys, outputting something like this:
-	// ====
-	// Key version 0:
-	//  0x143DE9B3F7316900 Andrew Ayer <andrew@example.com>
-	//  0x4E386D9C9C61702F ???
-	// Key version 1:
-	//  0x143DE9B3F7316900 Andrew Ayer <andrew@example.com>
-	//  0x1727274463D27F40 John Smith <smith@example.com>
-	//  0x4E386D9C9C61702F ???
-	// ====
-	// To resolve a long hex ID, use a command like this:
-	//  gpg --options /dev/null --fixed-list-mode --batch --with-colons --list-keys 0x143DE9B3F7316900
-
-	std::clog << "Error: ls-gpg-users is not yet implemented." << std::endl;
-	return 1;
-}
-
 int export_key (int argc, const char** argv)
 {
 	// TODO: provide options to export only certain key versions

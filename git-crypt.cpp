@@ -77,9 +77,6 @@ try {
 		if (std::strcmp(command, "add-gpg-user") == 0) {
 			return add_gpg_user(argc, argv);
 		}
-		if (std::strcmp(command, "ls-gpg-users") == 0) {
-			return ls_gpg_users(argc, argv);
-		}
 		if (std::strcmp(command, "export-key") == 0) {
 			return export_key(argc, argv);
 		}
