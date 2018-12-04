@@ -65,9 +65,6 @@ try {
 
 	try {
 		// Public commands:
-		if (std::strcmp(command, "init") == 0) {
-			return init(argc, argv);
-		}
 		if (std::strcmp(command, "unlock") == 0) {
 			return unlock(argc, argv);
 		}

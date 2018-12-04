@@ -60,6 +60,22 @@ impl Entry {
         }
     }
 
+    pub fn generate(version: u32) -> Entry {
+        use rand::prelude::*;
+
+        let mut rng = StdRng::from_entropy();
+
+        let mut e = Entry {
+            version: version,
+            aes_key: [0; AES_KEY_LEN],
+            hmac_key: [0; HMAC_KEY_LEN],
+        };
+        rng.fill_bytes(&mut e.aes_key[..]);
+        rng.fill_bytes(&mut e.hmac_key[..]);
+
+        e
+    }
+
     pub fn from_bytes(input: &[u8]) -> Result<(Entry, usize), Error> {
         let mut index: usize = 0;
         let mut entry = Entry::new();
@@ -180,6 +196,16 @@ impl KeyFile {
             key_name: None,
             entries: HashMap::new(),
         }
+    }
+
+    pub fn generate(name: Option<String>) -> KeyFile {
+        let mut kf = KeyFile {
+            key_name: name.clone(),
+            entries: HashMap::with_capacity(1),
+        };
+
+        kf.entries.insert(0, Entry::generate(0));
+        kf
     }
 
     pub fn from_file(path: &::std::path::Path) -> Result<KeyFile, Error> {
@@ -308,37 +334,25 @@ impl KeyFile {
     }
 }
 
-pub fn validate_key_name(key_name: &str) -> std::io::Result<()> {
+pub fn validate_key_name(key_name: &str) -> Result<(), String> {
     if key_name.is_empty() {
-        return Err(std::io::Error::new(
-            ErrorKind::Other,
-            "Key name may not be empty",
-        ));
+        return Err("Key name may not be empty".to_string());
     }
 
     if key_name == "default" {
-        return Err(std::io::Error::new(
-            ErrorKind::Other,
-            "'default' is not a legal key name",
-        ));
+        return Err("'default' is not a legal key name".to_string());
     }
 
-    key_name.chars().try_for_each(|c| -> std::io::Result<()> {
+    key_name.chars().try_for_each(|c| -> Result<(), String> {
         if c.is_alphanumeric() || c == '-' || c == '_' {
             return Ok(());
         } else {
-            return Err(std::io::Error::new(
-                ErrorKind::Other,
-                "Key names may contain only A-Z, a-z, 0-9, '-', and '_'",
-            ));
+            return Err("Key names may contain only A-Z, a-z, 0-9, '-', and '_'".to_string());
         }
     })?;
 
     if key_name.len() > KEY_NAME_MAX_LEN {
-        return Err(std::io::Error::new(
-            ErrorKind::Other,
-            "Key name is too long",
-        ));
+        return Err("Key name is too long".to_string());
     }
 
     return Ok(());
@@ -460,5 +474,18 @@ mod tests {
         );
 
         assert_eq!(k.get_latest().unwrap().version, 5);
+    }
+
+    #[test]
+    fn test_generate_key() {
+        let k = KeyFile::generate(Some("foobar".to_string()));
+        assert_eq!(k.entries.len(), 1);
+        assert!(k.entries.get(&0).is_some());
+        assert_eq!(k.key_name, Some("foobar".to_string()));
+
+        let e = k.get_latest().unwrap();
+        assert_eq!(e.version, 0);
+        assert_ne!(e.aes_key, [0; AES_KEY_LEN]);
+        assert_ne!(&e.hmac_key[..], &[0; HMAC_KEY_LEN][..]);
     }
 }

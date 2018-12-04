@@ -207,14 +207,6 @@ static bool same_key_name (const char* a, const char* b)
 	return (!a && !b) || (a && b && std::strcmp(a, b) == 0);
 }
 
-static void validate_key_name_or_throw (const char* key_name)
-{
-	std::string			reason;
-	if (!validate_key_name(key_name, &reason)) {
-		throw Error(reason);
-	}
-}
-
 static std::string get_internal_state_path ()
 {
 	// git rev-parse --git-dir
@@ -672,57 +664,6 @@ static void encrypt_repo_key (const char* key_name, const Key_file::Entry& key, 
 		gpg_encrypt_to_file(path, fingerprint, key_is_trusted, key_file_data.data(), key_file_data.size());
 		new_files->push_back(path);
 	}
-}
-
-int init (int argc, const char** argv)
-{
-	const char*	key_name = 0;
-	Options_list	options;
-	options.push_back(Option_def("-k", &key_name));
-	options.push_back(Option_def("--key-name", &key_name));
-
-	int		argi = parse_options(options, argc, argv);
-
-	if (!key_name && argc - argi == 1) {
-		std::clog << "Warning: 'git-crypt init' with a key file is deprecated as of git-crypt 0.4" << std::endl;
-		std::clog << "and will be removed in a future release. Please get in the habit of using" << std::endl;
-		std::clog << "'git-crypt unlock KEYFILE' instead." << std::endl;
-		return unlock(argc, argv);
-	}
-	if (argc - argi != 0) {
-		std::clog << "Error: git-crypt init takes no arguments" << std::endl;
-		help_init();
-		return 2;
-	}
-
-	if (key_name) {
-		validate_key_name_or_throw(key_name);
-	}
-
-	std::string		internal_key_path(get_internal_key_path(key_name));
-	if (access(internal_key_path.c_str(), F_OK) == 0) {
-		// TODO: add a -f option to reinitialize the repo anyways (this should probably imply a refresh)
-		// TODO: include key_name in error message
-		std::clog << "Error: this repository has already been initialized with git-crypt." << std::endl;
-		return 1;
-	}
-
-	// 1. Generate a key and install it
-	std::clog << "Generating key..." << std::endl;
-	Key_file		key_file;
-	key_file.set_key_name(key_name);
-	key_file.generate();
-
-	mkdir_parent(internal_key_path);
-	if (!key_file.store_to_file(internal_key_path.c_str())) {
-		std::clog << "Error: " << internal_key_path << ": unable to write key file" << std::endl;
-		return 1;
-	}
-
-	// 2. Configure git for git-crypt
-	configure_git_filters(key_name);
-
-	return 0;
 }
 
 int unlock (int argc, const char** argv)

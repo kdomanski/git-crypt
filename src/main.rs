@@ -2,11 +2,13 @@ extern crate libc;
 use libc::{c_char, c_int};
 
 extern crate getopts;
+extern crate rand;
 extern crate tempfile;
 
 mod commands;
 mod git;
 mod key;
+mod util;
 
 use std::env;
 use std::ffi::CString;
@@ -54,9 +56,10 @@ fn print_usage(out: &mut std::io::Write, arg0: String) {
     out.write(s.as_bytes()).unwrap();
 }
 
-fn print_version(out: &mut std::io::Write) {
+fn print_version(out: &mut std::io::Write) -> Result<(), String> {
     let ver: String = format!("git-crypt {}\n", env!("CARGO_PKG_VERSION"));
     out.write(ver.as_bytes()).unwrap();
+    Ok(())
 }
 
 fn main() {
@@ -81,7 +84,7 @@ fn main() {
     }
 
     if matches.opt_present("version") {
-        print_version(&mut std::io::stderr());
+        print_version(&mut std::io::stderr()).unwrap();
         std::process::exit(0);
     }
 
@@ -99,7 +102,7 @@ fn main() {
         std::process::exit(1);
     });
 
-    match cmd.as_ref() {
+    if let Err(msg) = match cmd.as_ref() {
         "version" => print_version(&mut std::io::stderr()),
         "help" => help(cmd_args),
         "smudge" => commands::smudge(cmd_args),
@@ -108,10 +111,17 @@ fn main() {
         "refresh" => commands::refresh(cmd_args),
         "rm-gpg-user" => commands::rm_gpg_user(cmd_args),
         "ls-gpg-users" => commands::ls_gpg_users(cmd_args),
+        "init" => commands::run_init(cmd_args, working_dir.as_path()),
         //"lock" => commands::lock(cmd_args)
-        //"unlock" => commands::unlock(cmd_args),
-        _ => {run_c_with_args(cpp_main,  cmd,cmd_args);},
-    };
+        //"unlock" => commands::unlock(cmd_args, working_dir.as_path()),
+        _ => {
+            run_c_with_args(cpp_main, cmd, cmd_args);
+            Ok(())
+        }
+    } {
+        eprintln!("{}", msg);
+        std::process::exit(1);
+    }
 
     // catch (const Option_error& e) {
     // 	std::clog << "git-crypt: Error: " << e.option_name << ": " << e.message << std::endl;
@@ -143,21 +153,20 @@ fn run_c_with_args(
     }
 }
 
-fn help(args: Vec<String>) {
+fn help(args: Vec<String>) -> Result<(), String> {
     if args.is_empty() {
         print_usage(&mut std::io::stdout(), std::env::args().nth(0).unwrap());
-        std::process::exit(0);
+        return Ok(());
     }
 
     if !help_for_command(args[0].clone()) {
-        eprintln!(
+        Err(format!(
             "Error: '{}' is not a git-crypt command. See 'git-crypt help'.",
             args[0]
-        );
-        std::process::exit(1);
+        ))
+    } else {
+        Ok(())
     }
-
-    std::process::exit(0);
 }
 
 fn help_for_command(command: String) -> bool {

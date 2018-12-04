@@ -41,7 +41,6 @@ struct Error {
 };
 
 // Public commands:
-int init (int argc, const char** argv);
 int unlock (int argc, const char** argv);
 int lock (int argc, const char** argv);
 int add_gpg_user (int argc, const char** argv);
@@ -51,7 +50,6 @@ int keygen (int argc, const char** argv);
 int status (int argc, const char** argv);
 
 // Help messages:
-extern "C" void help_init ();
 extern "C" void help_unlock ();
 extern "C" void help_lock ();
 extern "C" void help_add_gpg_user ();

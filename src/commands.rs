@@ -17,6 +17,48 @@ const MAX_CRYPT_BYTES: u64 = (1u64 << 32) * 16;
 
 const MAX_INMEMORY_SIZE: u64 = 8388608;
 
+fn configure_git_filters(repo: &::std::path::Path, key_name: Option<&str>) -> std::io::Result<()> {
+    let escaped_git_crypt_path = ::util::escape_shell_arg(&std::env::args().nth(0).unwrap());
+
+    if let Some(kn) = key_name {
+        ::git::git_config(
+            repo,
+            &format!("filter.git-crypt-{}.smudge", kn),
+            &format!("{} smudge --key-name={}", escaped_git_crypt_path, kn),
+        )?;
+        ::git::git_config(
+            repo,
+            &format!("filter.git-crypt-{}.clean", kn),
+            &format!("{} clean --key-name={}", escaped_git_crypt_path, kn),
+        )?;
+        ::git::git_config(repo, &format!("filter.git-crypt-{}.required", kn), "true")?;
+        ::git::git_config(
+            repo,
+            &format!("diff.git-crypt-{}.textconv", kn),
+            &format!("{} diff --key-name={}", escaped_git_crypt_path, kn),
+        )?;
+    } else {
+        ::git::git_config(
+            repo,
+            &format!("filter.git-crypt.smudge"),
+            &format!("{} smudge", escaped_git_crypt_path),
+        )?;
+        ::git::git_config(
+            repo,
+            &format!("filter.git-crypt.clean"),
+            &format!("{} clean", escaped_git_crypt_path),
+        )?;
+        ::git::git_config(repo, &format!("filter.git-crypt.required"), "true")?;
+        ::git::git_config(
+            repo,
+            &format!("diff.git-crypt.textconv"),
+            &format!("{} diff", escaped_git_crypt_path),
+        )?;
+    }
+
+    Ok(())
+}
+
 fn parse_plumbing_options(
     args: Vec<String>,
 ) -> Result<(Option<String>, Option<String>, Vec<String>), getopts::Fail> {
@@ -34,23 +76,21 @@ fn parse_plumbing_options(
 }
 
 // Decrypt contents of stdin and write to stdout
-pub fn smudge(args: Vec<String>) {
-    if let Err(e) = smudge_run(args) {
-        eprintln!("{}", e);
-        std::process::exit(1);
-    }
+pub fn smudge(args: Vec<String>) -> Result<(), String> {
+    smudge_run(args).map_err(|e| format!("{}", e))
 }
 
 fn smudge_run(args: Vec<String>) -> std::io::Result<()> {
-    let (key_name, key_file, _remaining_args) = match parse_plumbing_options(args) {
-        Ok(o) => o,
-        Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
-    };
+    let (key_name, key_file, _remaining_args) =
+        parse_plumbing_options(args).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))?;
 
     let key = if let Some(kf) = key_file {
         load_key_from_path(&Path::new(kf.as_str()))
     } else {
-        load_key_from_repo(key_name, ::std::env::current_dir()?.as_path())
+        load_key_from_repo(
+            key_name.as_ref().map(String::as_str),
+            ::std::env::current_dir()?.as_path(),
+        )
     }?;
 
     let mut header: [u8; 10 + NONCE_LEN] = [0; 10 + NONCE_LEN];
@@ -76,18 +116,13 @@ fn smudge_run(args: Vec<String>) -> std::io::Result<()> {
     }
 }
 
-pub fn diff(args: Vec<String>) {
-    if let Err(e) = diff_run(args) {
-        eprintln!("{}", e);
-        std::process::exit(1);
-    }
+pub fn diff(args: Vec<String>) -> Result<(), String> {
+    diff_run(args).map_err(|e| format!("{}", e))
 }
 
 fn diff_run(args: Vec<String>) -> std::io::Result<()> {
-    let (key_name, key_file, remaining_args) = match parse_plumbing_options(args) {
-        Ok(o) => o,
-        Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
-    };
+    let (key_name, key_file, remaining_args) =
+        parse_plumbing_options(args).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))?;
 
     if remaining_args.len() != 1 {
         return Err(Error::new(
@@ -102,7 +137,10 @@ fn diff_run(args: Vec<String>) -> std::io::Result<()> {
     let key = if let Some(kf) = key_file {
         load_key_from_path(&Path::new(kf.as_str()))
     } else {
-        load_key_from_repo(key_name, ::std::env::current_dir()?.as_path())
+        load_key_from_repo(
+            key_name.as_ref().map(String::as_str),
+            ::std::env::current_dir()?.as_path(),
+        )
     }?;
     let mut file = std::fs::File::open(remaining_args.first().unwrap())?;
 
@@ -174,8 +212,8 @@ fn load_key_from_path(key_path: &Path) -> std::io::Result<::key::KeyFile> {
     }
 }
 
-fn load_key_from_repo(key_name: Option<String>, repo: &Path) -> std::io::Result<::key::KeyFile> {
-    let path = ::git::get_internal_key_path(repo, key_name.as_ref().map(|x| x.as_str()))?;
+fn load_key_from_repo(key_name: Option<&str>, repo: &Path) -> std::io::Result<::key::KeyFile> {
+    let path = ::git::get_internal_key_path(repo, key_name)?;
 
     match ::key::KeyFile::from_file(&path.as_path()) {
         Ok(o) => Ok(o),
@@ -187,23 +225,21 @@ fn load_key_from_repo(key_name: Option<String>, repo: &Path) -> std::io::Result<
 }
 
 // Encrypt contents of stdin and write to stdout
-pub fn clean(args: Vec<String>) {
-    if let Err(e) = clean_run(args) {
-        eprintln!("{}", e);
-        std::process::exit(1);
-    }
+pub fn clean(args: Vec<String>) -> Result<(), String> {
+    clean_run(args).map_err(|e| format!("{}", e))
 }
 
 fn clean_run(args: Vec<String>) -> std::io::Result<()> {
-    let (key_name, key_file, _remaining_args) = match parse_plumbing_options(args) {
-        Ok(o) => o,
-        Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
-    };
+    let (key_name, key_file, _remaining_args) =
+        parse_plumbing_options(args).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))?;
 
     let key = if let Some(kf) = key_file {
-        load_key_from_path (&Path::new(kf.as_str()))
+        load_key_from_path(&Path::new(kf.as_str()))
     } else {
-        load_key_from_repo(key_name, ::std::env::current_dir()?.as_path())
+        load_key_from_repo(
+            key_name.as_ref().map(String::as_str),
+            ::std::env::current_dir()?.as_path(),
+        )
     }?;
 
     encrypt_stream(&key, &mut std::io::stdin(), &mut std::io::stdout())?;
@@ -315,15 +351,73 @@ fn encrypt_stream(
     Ok(())
 }
 
-pub fn refresh(_args: Vec<String>) {
+pub fn refresh(_args: Vec<String>) -> Result<(), String> {
     unimplemented!("refresh");
 }
 
-pub fn rm_gpg_user(_args: Vec<String>) {
+pub fn rm_gpg_user(_args: Vec<String>) -> Result<(), String> {
     unimplemented!("rm-gpg-user");
 }
 
-pub fn ls_gpg_users(_args: Vec<String>) {
+pub fn run_init(args: Vec<String>, repo: &Path) -> Result<(), String> {
+    let mut opts = getopts::Options::new();
+    opts.optopt("k", "key-name", "key name", "KEYNAME");
+
+    let matches = opts.parse(args.clone()).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        ::help_init();
+        std::process::exit(2);
+    });
+
+    let key_name = matches.opt_str("key-name");
+
+    init(key_name, repo)
+}
+
+fn init(key_name: Option<String>, repo: &Path) -> Result<(), String> {
+    if let Some(s) = key_name.as_ref() {
+        ::key::validate_key_name(s)?;
+    }
+
+    let internal_key_path: ::std::path::PathBuf =
+        ::git::get_internal_key_path(repo, key_name.as_ref().map(|s| s.as_str()))
+            .map_err(|e| format!("failed to get internal key path: {}", e))?;
+
+    if Path::new(&internal_key_path).exists() {
+        // TODO: add a -f option to reinitialize the repo anyways (this should probably imply a refresh)
+        // TODO: include key_name in error message
+        return Err(
+            "Error: this repository has already been initialized with git-crypt.".to_string(),
+        );
+    }
+
+    // 1. Generate a key and install it
+    eprintln!("Generating key...");
+    let key = ::key::KeyFile::generate(key_name.clone());
+
+    let parent = internal_key_path.parent().unwrap();
+    std::fs::create_dir_all(parent)
+        .map_err(|e| format!("failed to create key directory: {}", e))?;
+    let key_data = key.store();
+    let mut f = std::fs::File::create(&internal_key_path)
+        .map_err(|e| format!("failed to create key file: {}", e))?;
+
+    f.write_all(key_data.as_slice())
+        .map_err(|e| format!("failed to write key file: {}", e))?;
+
+    f.flush()
+        .map_err(|e| format!("failed to write key file: {}", e))?;
+
+    // 2. Configure git for git-crypt
+    configure_git_filters(repo, key_name.as_ref().map(String::as_str))
+        .map_err(|e| format!("failed to configure git filters: {}", e))?;
+
+    eprintln!("Done.");
+
+    Ok(())
+}
+
+pub fn ls_gpg_users(_args: Vec<String>) -> Result<(), String> {
     // Sketch:
     // Scan the sub-directories in .git-crypt/keys, outputting something like this:
     // ====
@@ -382,14 +476,13 @@ mod tests {
         header.clone_from_slice(&TEST_CIPHERTEXT[..10 + NONCE_LEN]);
 
         let mut output: Vec<u8> = Vec::new();
-        assert!(
-            decrypt_file_to_stream(
-                &key,
-                header,
-                &mut &TEST_CIPHERTEXT[10 + NONCE_LEN..],
-                &mut output
-            ).is_ok()
-        );
+        assert!(decrypt_file_to_stream(
+            &key,
+            header,
+            &mut &TEST_CIPHERTEXT[10 + NONCE_LEN..],
+            &mut output
+        )
+        .is_ok());
         assert!(output.as_slice().eq(TEST_CLEARTEXT.as_ref()));
     }
 
@@ -434,6 +527,54 @@ mod tests {
         assert_eq!(
             md5.result_str(),
             "0a1bb190f005be6a1dd005dc355d1b9c".to_string()
+        );
+    }
+
+    fn test_create_test_repo() -> Result<::tempfile::TempDir, std::io::Error> {
+        let dir = ::tempfile::tempdir()?;
+
+        assert!(::std::process::Command::new("git")
+            .arg("init")
+            .current_dir(dir.path())
+            .output()?
+            .status
+            .success());
+
+        let pack_dir_path = dir.path().join(Path::new(".git/objects/pack"));
+        assert!(pack_dir_path.is_dir());
+
+        init(None, dir.path()).unwrap();
+
+        Ok(dir)
+    }
+
+    #[test]
+    fn test_init_repo() {
+        let tempdir = test_create_test_repo().unwrap();
+
+        let key_path = tempdir.path().join(".git/git-crypt/keys/default");
+        let key_file_result = ::key::KeyFile::from_file(&key_path);
+        if let Err(e) = key_file_result {
+            panic!("{:?}: {}", key_path, e);
+        }
+
+        let bin_name = &std::env::args().nth(0).unwrap();
+
+        assert_eq!(
+            ::git::get_git_config(tempdir.path(), "filter.git-crypt.smudge".to_string()).unwrap(),
+            format!("\"{}\" smudge", bin_name)
+        );
+        assert_eq!(
+            ::git::get_git_config(tempdir.path(), "filter.git-crypt.clean".to_string()).unwrap(),
+            format!("\"{}\" clean", bin_name)
+        );
+        assert_eq!(
+            ::git::get_git_config(tempdir.path(), "filter.git-crypt.required".to_string()).unwrap(),
+            "true".to_string()
+        );
+        assert_eq!(
+            ::git::get_git_config(tempdir.path(), "diff.git-crypt.textconv".to_string()).unwrap(),
+            format!("\"{}\" diff", bin_name)
         );
     }
 }
