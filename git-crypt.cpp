@@ -71,9 +71,6 @@ try {
 		if (std::strcmp(command, "lock") == 0) {
 			return lock(argc, argv);
 		}
-		if (std::strcmp(command, "add-gpg-user") == 0) {
-			return add_gpg_user(argc, argv);
-		}
 		if (std::strcmp(command, "export-key") == 0) {
 			return export_key(argc, argv);
 		}

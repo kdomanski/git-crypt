@@ -59,8 +59,6 @@ public:
 	struct Malformed { }; // exception class
 	struct Incompatible { }; // exception class
 
-	const Entry*			get_latest () const;
-
 	const Entry*			get (uint32_t version) const;
 	void				add (const Entry&);
 
@@ -70,12 +68,9 @@ public:
 	bool				load_from_file (const char* filename);
 	bool				store_to_file (const char* filename) const;
 
-	std::string			store_to_string () const;
-
 	void				generate ();
 
 	bool				is_empty () const { return entries.empty(); }
-	bool				is_filled () const { return !is_empty(); }
 
 	uint32_t			latest () const;
 

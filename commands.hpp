@@ -52,7 +52,6 @@ int status (int argc, const char** argv);
 // Help messages:
 extern "C" void help_unlock ();
 extern "C" void help_lock ();
-extern "C" void help_add_gpg_user ();
 extern "C" void help_export_key ();
 extern "C" void help_keygen ();
 extern "C" void help_refresh ();

@@ -61,76 +61,6 @@ static std::string gpg_nth_column (const std::string& line, unsigned int col)
 	       line.substr(pos);
 }
 
-// given a key fingerprint, return the last 8 nibbles
-std::string gpg_shorten_fingerprint (const std::string& fingerprint)
-{
-	return fingerprint.size() == 40 ? fingerprint.substr(32) : fingerprint;
-}
-
-// given a key fingerprint, return the key's UID (e.g. "John Smith <jsmith@example.com>")
-std::string gpg_get_uid (const std::string& fingerprint)
-{
-	// gpg --batch --with-colons --fixed-list-mode --list-keys 0x7A399B2DB06D039020CD1CE1D0F3702D61489532
-	std::vector<std::string>	command;
-	command.push_back(gpg_get_executable());
-	command.push_back("--batch");
-	command.push_back("--with-colons");
-	command.push_back("--fixed-list-mode");
-	command.push_back("--list-keys");
-	command.push_back("0x" + fingerprint);
-	std::stringstream		command_output;
-	if (!successful_exit(exec_command(command, command_output))) {
-		// This could happen if the keyring does not contain a public key with this fingerprint
-		return "";
-	}
-
-	while (command_output.peek() != -1) {
-		std::string		line;
-		std::getline(command_output, line);
-		if (line.substr(0, 4) == "uid:") {
-			// uid:u::::1395975462::AB97D6E3E5D8789988CA55E5F77D9E7397D05229::John Smith <jsmith@example.com>:
-			// want the 9th column (counting from 0)
-			return gpg_nth_column(line, 9);
-		}
-	}
-	
-	return "";
-}
-
-// return a list of fingerprints of public keys matching the given search query (such as jsmith@example.com)
-std::vector<std::string> gpg_lookup_key (const std::string& query)
-{
-	std::vector<std::string>	fingerprints;
-
-	// gpg --batch --with-colons --fingerprint --list-keys jsmith@example.com
-	std::vector<std::string>	command;
-	command.push_back(gpg_get_executable());
-	command.push_back("--batch");
-	command.push_back("--with-colons");
-	command.push_back("--fingerprint");
-	command.push_back("--list-keys");
-	command.push_back(query);
-	std::stringstream		command_output;
-	if (successful_exit(exec_command(command, command_output))) {
-		bool			is_pubkey = false;
-		while (command_output.peek() != -1) {
-			std::string		line;
-			std::getline(command_output, line);
-			if (line.substr(0, 4) == "pub:") {
-				is_pubkey = true;
-			} else if (line.substr(0, 4) == "sub:") {
-				is_pubkey = false;
-			} else if (is_pubkey && line.substr(0, 4) == "fpr:") {
-				// fpr:::::::::7A399B2DB06D039020CD1CE1D0F3702D61489532:
-				// want the 9th column (counting from 0)
-				fingerprints.push_back(gpg_nth_column(line, 9));
-			}
-		}
-	}
-	
-	return fingerprints;
-}
-
 std::vector<std::string> gpg_list_secret_keys ()
 {
 	// gpg --batch --with-colons --list-secret-keys --fingerprint
@@ -158,26 +88,6 @@ std::vector<std::string> gpg_list_secret_keys ()
 	}
 	
 	return secret_keys;
-}
-
-void gpg_encrypt_to_file (const std::string& filename, const std::string& recipient_fingerprint, bool key_is_trusted, const char* p, size_t len)
-{
-	// gpg --batch -o FILENAME -r RECIPIENT -e
-	std::vector<std::string>	command;
-	command.push_back(gpg_get_executable());
-	command.push_back("--batch");
-	if (key_is_trusted) {
-		command.push_back("--trust-model");
-		command.push_back("always");
-	}
-	command.push_back("-o");
-	command.push_back(filename);
-	command.push_back("-r");
-	command.push_back("0x" + recipient_fingerprint);
-	command.push_back("-e");
-	if (!successful_exit(exec_command_with_input(command, p, len))) {
-		throw Gpg_error("Failed to encrypt");
-	}
 }
 
 void gpg_decrypt_from_file (const std::string& filename, std::ostream& output)

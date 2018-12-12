@@ -7,6 +7,7 @@ extern crate tempfile;
 
 mod commands;
 mod git;
+mod gpg;
 mod key;
 mod util;
 
@@ -45,12 +46,12 @@ fn print_usage(out: &mut std::io::Write, arg0: String) {
     s += "  init KEYFILE         alias for 'unlock KEYFILE'\n";
     s += "  keygen KEYFILE       generate a git-crypt key in the given file\n";
     /*
-	s += std::endl;
-	s += "Plumbing commands (not to be used directly):\n";
-	s += "   clean [LEGACY-KEYFILE]\n";
-	s += "   smudge [LEGACY-KEYFILE]\n";
-	s += "   diff [LEGACY-KEYFILE] FILE\n";
-	*/
+    s += std::endl;
+    s += "Plumbing commands (not to be used directly):\n";
+    s += "   clean [LEGACY-KEYFILE]\n";
+    s += "   smudge [LEGACY-KEYFILE]\n";
+    s += "   diff [LEGACY-KEYFILE] FILE\n";
+    */
     s += "\n";
     s += "See 'git-crypt help COMMAND' for more information on a specific command.\n";
     out.write(s.as_bytes()).unwrap();
@@ -112,6 +113,7 @@ fn main() {
         "rm-gpg-user" => commands::rm_gpg_user(cmd_args),
         "ls-gpg-users" => commands::ls_gpg_users(cmd_args),
         "init" => commands::run_init(cmd_args, working_dir.as_path()),
+        "add-gpg-user" => commands::add_gpg_user(cmd_args, working_dir.as_path()),
         //"lock" => commands::lock(cmd_args)
         //"unlock" => commands::unlock(cmd_args, working_dir.as_path()),
         _ => {
@@ -187,8 +189,7 @@ fn help_for_command(command: String) -> bool {
     return true;
 }
 
-#[no_mangle]
-pub extern "C" fn help_init() {
+fn help_init() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt init [OPTIONS]\n");
     eprint!("\n");
@@ -214,8 +215,7 @@ pub extern "C" fn help_lock() {
     eprint!("\n");
 }
 
-#[no_mangle]
-pub extern "C" fn help_add_gpg_user() {
+fn help_add_gpg_user() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt add-gpg-user [OPTIONS] GPG_USER_ID ...\n");
     eprint!("\n");

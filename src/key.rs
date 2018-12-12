@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::ErrorKind;
 use std::io::Read;
 
 const KEY_NAME_MAX_LEN: usize = 128;
@@ -45,6 +44,7 @@ impl std::fmt::Display for Error {
     }
 }
 
+#[derive(Copy)]
 pub struct Entry {
     pub version: u32,
     pub aes_key: [u8; AES_KEY_LEN],
@@ -185,13 +185,23 @@ impl Entry {
     }
 }
 
+impl Clone for Entry {
+    fn clone(&self) -> Entry {
+        Entry {
+            version: self.version,
+            aes_key: self.aes_key,
+            hmac_key: self.hmac_key,
+        }
+    }
+}
+
 pub struct KeyFile {
     pub key_name: Option<String>,
     pub entries: HashMap<u32, Entry>,
 }
 
 impl KeyFile {
-    fn new() -> KeyFile {
+    pub fn new() -> KeyFile {
         KeyFile {
             key_name: None,
             entries: HashMap::new(),

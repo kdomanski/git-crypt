@@ -130,11 +130,6 @@ void		Key_file::Entry::generate (uint32_t arg_version)
 	random_bytes(hmac_key, HMAC_KEY_LEN);
 }
 
-const Key_file::Entry*	Key_file::get_latest () const
-{
-	return is_filled() ? get(latest()) : 0;
-}
-
 const Key_file::Entry*	Key_file::get (uint32_t version) const
 {
 	Map::const_iterator	it(entries.find(version));
@@ -255,13 +250,6 @@ bool		Key_file::store_to_file (const char* key_file_name) const
 		return false;
 	}
 	return true;
-}
-
-std::string	Key_file::store_to_string () const
-{
-	std::ostringstream	ss;
-	store(ss);
-	return ss.str();
 }
 
 void		Key_file::generate ()
