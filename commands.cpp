@@ -134,19 +134,6 @@ static bool git_has_config (const std::string& name)
 	}
 }
 
-static void git_deconfig (const std::string& name)
-{
-	std::vector<std::string>	command;
-	command.push_back("git");
-	command.push_back("config");
-	command.push_back("--remove-section");
-	command.push_back(name);
-
-	if (!successful_exit(exec_command(command))) {
-		throw Error("'git config' failed");
-	}
-}
-
 static void configure_git_filters (const char* key_name)
 {
 	std::string	escaped_git_crypt_path(escape_shell_arg(our_exe_path()));
@@ -165,21 +152,6 @@ static void configure_git_filters (const char* key_name)
 		git_config("filter.git-crypt.clean", escaped_git_crypt_path + " clean");
 		git_config("filter.git-crypt.required", "true");
 		git_config("diff.git-crypt.textconv", escaped_git_crypt_path + " diff");
-	}
-}
-
-static void deconfigure_git_filters (const char* key_name)
-{
-	// deconfigure the git-crypt filters
-	if (git_has_config("filter." + attribute_name(key_name) + ".smudge") ||
-			git_has_config("filter." + attribute_name(key_name) + ".clean") ||
-			git_has_config("filter." + attribute_name(key_name) + ".required")) {
-
-		git_deconfig("filter." + attribute_name(key_name));
-	}
-
-	if (git_has_config("diff." + attribute_name(key_name) + ".textconv")) {
-		git_deconfig("diff." + attribute_name(key_name));
 	}
 }
 
@@ -725,91 +697,6 @@ int unlock (int argc, const char** argv)
 	if (!git_checkout(encrypted_files)) {
 		std::clog << "Error: 'git checkout' failed" << std::endl;
 		std::clog << "git-crypt has been set up but existing encrypted files have not been decrypted" << std::endl;
-		return 1;
-	}
-
-	return 0;
-}
-
-int lock (int argc, const char** argv)
-{
-	const char*	key_name = 0;
-	bool		all_keys = false;
-	bool		force = false;
-	Options_list	options;
-	options.push_back(Option_def("-k", &key_name));
-	options.push_back(Option_def("--key-name", &key_name));
-	options.push_back(Option_def("-a", &all_keys));
-	options.push_back(Option_def("--all", &all_keys));
-	options.push_back(Option_def("-f", &force));
-	options.push_back(Option_def("--force", &force));
-
-	int			argi = parse_options(options, argc, argv);
-
-	if (argc - argi != 0) {
-		std::clog << "Error: git-crypt lock takes no arguments" << std::endl;
-		help_lock();
-		return 2;
-	}
-
-	if (all_keys && key_name) {
-		std::clog << "Error: -k and --all options are mutually exclusive" << std::endl;
-		return 2;
-	}
-
-	// 1. Make sure working directory is clean (ignoring untracked files)
-	// We do this because we check out files later, and we don't want the
-	// user to lose any changes.  (TODO: only care if encrypted files are
-	// modified, since we only check out encrypted files)
-
-	// Running 'git status' also serves as a check that the Git repo is accessible.
-
-	std::stringstream	status_output;
-	get_git_status(status_output);
-	if (!force && status_output.peek() != -1) {
-		std::clog << "Error: Working directory not clean." << std::endl;
-		std::clog << "Please commit your changes or 'git stash' them before running 'git-crypt lock'." << std::endl;
-		std::clog << "Or, use 'git-crypt lock --force' and possibly lose uncommitted changes." << std::endl;
-		return 1;
-	}
-
-	// 2. deconfigure the git filters and remove decrypted keys
-	std::vector<std::string>	encrypted_files;
-	if (all_keys) {
-		// deconfigure for all keys
-		std::vector<std::string> dirents = get_directory_contents(get_internal_keys_path().c_str());
-
-		for (std::vector<std::string>::const_iterator dirent(dirents.begin()); dirent != dirents.end(); ++dirent) {
-			const char* this_key_name = (*dirent == "default" ? 0 : dirent->c_str());
-			remove_file(get_internal_key_path(this_key_name));
-			deconfigure_git_filters(this_key_name);
-			get_encrypted_files(encrypted_files, this_key_name);
-		}
-	} else {
-		// just handle the given key
-		std::string	internal_key_path(get_internal_key_path(key_name));
-		if (access(internal_key_path.c_str(), F_OK) == -1 && errno == ENOENT) {
-			std::clog << "Error: this repository is already locked";
-			if (key_name) {
-				std::clog << " with key '" << key_name << "'";
-			}
-			std::clog << "." << std::endl;
-			return 1;
-		}
-
-		remove_file(internal_key_path);
-		deconfigure_git_filters(key_name);
-		get_encrypted_files(encrypted_files, key_name);
-	}
-
-	// 3. Check out the files that are currently decrypted but should be encrypted.
-	// Git won't check out a file if its mtime hasn't changed, so touch every file first.
-	for (std::vector<std::string>::const_iterator file(encrypted_files.begin()); file != encrypted_files.end(); ++file) {
-		touch_file(*file);
-	}
-	if (!git_checkout(encrypted_files)) {
-		std::clog << "Error: 'git checkout' failed" << std::endl;
-		std::clog << "git-crypt has been locked but up but existing decrypted files have not been encrypted" << std::endl;
 		return 1;
 	}
 

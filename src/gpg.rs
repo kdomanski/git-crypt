@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::Path;
 
 fn gpg_get_executable(repo: &Path) -> String {
-    match ::git::get_git_config(repo, "gpg.program".to_string()) {
+    match ::git::get_git_config(repo, "gpg.program") {
         Ok(o) => o.trim().to_string(),
         Err(_) => String::from("gpg".to_string()),
     }
@@ -116,7 +116,8 @@ pub fn encrypt_to_file(
         format!(
             "failed to run gpg --batch -o {} -r 0x{} -e: {}",
             filename.to_str().unwrap_or("FILENAME"),
-            recipient_fingerprint, e
+            recipient_fingerprint,
+            e
         )
     })?;
 

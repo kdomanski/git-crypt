@@ -119,18 +119,6 @@ void	touch_file (const std::string& filename)
 	CloseHandle(fh);
 }
 
-void	remove_file (const std::string& filename)
-{
-	if (!DeleteFileA(filename.c_str())) {
-		DWORD	error = GetLastError();
-		if (error == ERROR_FILE_NOT_FOUND) {
-			return;
-		} else {
-			throw System_error("DeleteFileA", filename, error);
-		}
-	}
-}
-
 static void	init_std_streams_platform ()
 {
 	_setmode(_fileno(stdin), _O_BINARY);

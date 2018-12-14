@@ -68,9 +68,6 @@ try {
 		if (std::strcmp(command, "unlock") == 0) {
 			return unlock(argc, argv);
 		}
-		if (std::strcmp(command, "lock") == 0) {
-			return lock(argc, argv);
-		}
 		if (std::strcmp(command, "export-key") == 0) {
 			return export_key(argc, argv);
 		}

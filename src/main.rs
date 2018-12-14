@@ -1,6 +1,7 @@
 extern crate libc;
 use libc::{c_char, c_int};
 
+extern crate filetime;
 extern crate getopts;
 extern crate rand;
 extern crate tempfile;
@@ -114,7 +115,7 @@ fn main() {
         "ls-gpg-users" => commands::ls_gpg_users(cmd_args),
         "init" => commands::run_init(cmd_args, working_dir.as_path()),
         "add-gpg-user" => commands::add_gpg_user(cmd_args, working_dir.as_path()),
-        //"lock" => commands::lock(cmd_args)
+        "lock" => commands::lock(cmd_args, &working_dir),
         //"unlock" => commands::unlock(cmd_args, working_dir.as_path()),
         _ => {
             run_c_with_args(cpp_main, cmd, cmd_args);

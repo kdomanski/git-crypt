@@ -114,13 +114,6 @@ void	touch_file (const std::string& filename)
 	}
 }
 
-void	remove_file (const std::string& filename)
-{
-	if (unlink(filename.c_str()) == -1 && errno != ENOENT) {
-		throw System_error("unlink", filename, errno);
-	}
-}
-
 static void	init_std_streams_platform ()
 {
 }
