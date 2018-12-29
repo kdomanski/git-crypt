@@ -29,7 +29,6 @@
  */
 
 #include "commands.hpp"
-#include "crypto.hpp"
 #include "util.hpp"
 #include "key.hpp"
 #include "gpg.hpp"
@@ -733,36 +732,6 @@ int export_key (int argc, const char** argv)
 		}
 	}
 
-	return 0;
-}
-
-int keygen (int argc, const char** argv)
-{
-	if (argc != 1) {
-		std::clog << "Error: no filename specified" << std::endl;
-		help_keygen();
-		return 2;
-	}
-
-	const char*		key_file_name = argv[0];
-
-	if (std::strcmp(key_file_name, "-") != 0 && access(key_file_name, F_OK) == 0) {
-		std::clog << key_file_name << ": File already exists" << std::endl;
-		return 1;
-	}
-
-	std::clog << "Generating key..." << std::endl;
-	Key_file		key_file;
-	key_file.generate();
-
-	if (std::strcmp(key_file_name, "-") == 0) {
-		key_file.store(std::cout);
-	} else {
-		if (!key_file.store_to_file(key_file_name)) {
-			std::clog << "Error: " << key_file_name << ": unable to write key file" << std::endl;
-			return 1;
-		}
-	}
 	return 0;
 }
 

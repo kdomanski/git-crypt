@@ -30,7 +30,6 @@
 
 #include "key.hpp"
 #include "util.hpp"
-#include "crypto.hpp"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdint.h>
@@ -121,13 +120,6 @@ void		Key_file::Entry::store (std::ostream& out) const
 
 	// End
 	write_be32(out, KEY_FIELD_END);
-}
-
-void		Key_file::Entry::generate (uint32_t arg_version)
-{
-	version = arg_version;
-	random_bytes(aes_key, AES_KEY_LEN);
-	random_bytes(hmac_key, HMAC_KEY_LEN);
 }
 
 const Key_file::Entry*	Key_file::get (uint32_t version) const
@@ -250,20 +242,6 @@ bool		Key_file::store_to_file (const char* key_file_name) const
 		return false;
 	}
 	return true;
-}
-
-void		Key_file::generate ()
-{
-	uint32_t	version(is_empty() ? 0 : latest() + 1);
-	entries[version].generate(version);
-}
-
-uint32_t	Key_file::latest () const
-{
-	if (is_empty()) {
-		throw std::invalid_argument("Key_file::latest");
-	}
-	return entries.begin()->first;
 }
 
 bool validate_key_name (const char* key_name, std::string* reason)

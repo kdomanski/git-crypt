@@ -6,8 +6,8 @@ const FORMAT_VERSION: u32 = 2;
 const HEADER_FIELD_END: u32 = 0;
 const HEADER_FIELD_KEY_NAME: u32 = 1;
 
-const HMAC_KEY_LEN: usize = 64;
-const AES_KEY_LEN: usize = 32;
+pub const HMAC_KEY_LEN: usize = 64;
+pub const AES_KEY_LEN: usize = 32;
 
 const MAX_FIELD_LEN: usize = 1 << 20;
 

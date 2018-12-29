@@ -933,6 +933,39 @@ fn is_git_file_mode(mode: u32) -> bool {
     (mode & 0o0170000) == 0o0100000
 }
 
+pub fn keygen(args: Vec<String>) -> Result<(), String> {
+    if args.len() != 1 {
+        eprintln!("Error: no filename specified");
+        ::help_keygen();
+        std::process::exit(2);
+    }
+
+    let filename = Path::new(&args[0]);
+
+    if filename.exists() {
+        return Err("'{}': file already exists".to_string());
+    }
+
+    eprintln!("Generating key...");
+    let key_data = ::key::KeyFile::generate(None).store();
+
+    let target_name = args[0].as_str();
+    let mut target: Box<std::io::Write> = if target_name == "-" {
+        Box::new(std::io::stdout())
+    } else {
+        Box::new(
+            std::fs::File::create(target_name)
+                .map_err(|e| format!("failed to create file '{}': {}", target_name, e))?,
+        )
+    };
+
+    target
+        .write_all(&key_data)
+        .map_err(|e| format!("failed to write key data: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1322,7 +1355,7 @@ mod tests {
         );
         assert_eq!(
             ::git::git_has_config(repo, "diff.git-crypt.textconv").unwrap(),
-           false
+            false
         );
 
         // key named 'abc'
@@ -1414,10 +1447,39 @@ mod tests {
         let mut data_crypt: Vec<u8> = Vec::new();
         let mut data_nocrypt: Vec<u8> = Vec::new();
 
-        std::fs::File::open(repo.join("somefile.txt")).unwrap().read_to_end(&mut data_crypt).unwrap();
-        std::fs::File::open(repo.join("somefile.nocrypt")).unwrap().read_to_end(&mut data_nocrypt).unwrap();
+        std::fs::File::open(repo.join("somefile.txt"))
+            .unwrap()
+            .read_to_end(&mut data_crypt)
+            .unwrap();
+        std::fs::File::open(repo.join("somefile.nocrypt"))
+            .unwrap()
+            .read_to_end(&mut data_nocrypt)
+            .unwrap();
 
         assert!(data_nocrypt.as_slice().eq("some more data".as_bytes()));
         assert_eq!(data_crypt.len(), 95);
+    }
+
+    #[test]
+    fn test_keygen() {
+        let dir = ::tempfile::tempdir().unwrap();
+        let target = dir.path().join("keyfile");
+
+        let args: Vec<String> = vec![target.to_str().unwrap().to_string()];
+        keygen(args).unwrap();
+
+        let mut data: Vec<u8> = Vec::new();
+        let mut f = std::fs::File::open(target).unwrap();
+        f.read_to_end(&mut data).unwrap();
+        assert_eq!(&data[..12], "\0GITCRYPTKEY".as_bytes());
+
+        let key = ::key::KeyFile::from_bytes(&data).unwrap();
+        assert_eq!(key.key_name, None);
+        assert_eq!(key.entries.len(), 1);
+        assert!(key.entries.contains_key(&0));
+        let entry = key.entries.get(&0).unwrap();
+        assert_eq!(entry.version, 0);
+        assert_ne!(&entry.aes_key[..], [0; ::key::AES_KEY_LEN]);
+        assert_ne!(&entry.hmac_key[..], &[0; ::key::HMAC_KEY_LEN][..]);
     }
 }

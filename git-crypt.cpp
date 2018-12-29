@@ -31,7 +31,6 @@
 #include "git-crypt.hpp"
 #include "commands.hpp"
 #include "util.hpp"
-#include "crypto.hpp"
 #include "key.hpp"
 #include "gpg.hpp"
 #include "parse_options.hpp"
@@ -54,7 +53,6 @@ try {
 	 */
 
 	init_std_streams();
-	init_crypto();
 
 	/*
 	 * Pass off to command handler
@@ -70,9 +68,6 @@ try {
 		}
 		if (std::strcmp(command, "export-key") == 0) {
 			return export_key(argc, argv);
-		}
-		if (std::strcmp(command, "keygen") == 0) {
-			return keygen(argc, argv);
 		}
 		if (std::strcmp(command, "status") == 0) {
 			return status(argc, argv);
@@ -94,9 +89,6 @@ try {
 	return 1;
 } catch (const System_error& e) {
 	std::cerr << "git-crypt: System error: " << e.message() << std::endl;
-	return 1;
-} catch (const Crypto_error& e) {
-	std::cerr << "git-crypt: Crypto error: " << e.where << ": " << e.message << std::endl;
 	return 1;
 } catch (Key_file::Incompatible) {
 	std::cerr << "git-crypt: This repository contains a incompatible key file.  Please upgrade git-crypt." << std::endl;

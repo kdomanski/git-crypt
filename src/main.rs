@@ -117,6 +117,7 @@ fn main() {
         "add-gpg-user" => commands::add_gpg_user(cmd_args, working_dir.as_path()),
         "lock" => commands::lock(cmd_args, &working_dir),
         //"unlock" => commands::unlock(cmd_args, working_dir.as_path()),
+        "keygen" => commands::keygen(cmd_args),
         _ => {
             run_c_with_args(cpp_main, cmd, cmd_args);
             Ok(())
@@ -205,8 +206,7 @@ pub extern "C" fn help_unlock() {
     eprint!("   or: git-crypt unlock KEY_FILE ...\n");
 }
 
-#[no_mangle]
-pub extern "C" fn help_lock() {
+fn help_lock() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt lock [OPTIONS]\n");
     eprint!("\n");
@@ -226,8 +226,7 @@ fn help_add_gpg_user() {
     eprint!("\n");
 }
 
-#[no_mangle]
-pub extern "C" fn help_rm_gpg_user() {
+fn help_rm_gpg_user() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt rm-gpg-user [OPTIONS] GPG_USER_ID ...\n");
     eprint!("\n");
@@ -236,8 +235,7 @@ pub extern "C" fn help_rm_gpg_user() {
     eprint!("\n");
 }
 
-#[no_mangle]
-pub extern "C" fn help_ls_gpg_users() {
+fn help_ls_gpg_users() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt ls-gpg-users\n");
 }
@@ -252,16 +250,14 @@ pub extern "C" fn help_export_key() {
     eprint!("When FILENAME is -, export to standard out.\n");
 }
 
-#[no_mangle]
-pub extern "C" fn help_keygen() {
+fn help_keygen() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt keygen FILENAME\n");
     eprint!("\n");
     eprint!("When FILENAME is -, write to standard out.\n");
 }
 
-#[no_mangle]
-pub extern "C" fn help_refresh() {
+fn help_refresh() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt refresh\n");
 }

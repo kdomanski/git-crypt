@@ -53,7 +53,6 @@ public:
 
 		void			load (std::istream&);
 		void			store (std::ostream&) const;
-		void			generate (uint32_t version);
 	};
 
 	struct Malformed { }; // exception class
@@ -67,12 +66,6 @@ public:
 
 	bool				load_from_file (const char* filename);
 	bool				store_to_file (const char* filename) const;
-
-	void				generate ();
-
-	bool				is_empty () const { return entries.empty(); }
-
-	uint32_t			latest () const;
 
 	void				set_key_name (const char* k) { key_name = k ? k : ""; }
 	const char*			get_key_name () const { return key_name.empty() ? 0 : key_name.c_str(); }
