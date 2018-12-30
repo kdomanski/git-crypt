@@ -50,61 +50,6 @@ int exec_command (const std::vector<std::string>& args, std::ostream& output)
 	return proc.wait();
 }
 
-int exec_command_with_input (const std::vector<std::string>& args, const char* p, size_t len)
-{
-	Coprocess	proc;
-	std::ostream*	proc_stdin = proc.stdin_pipe();
-	proc.spawn(args);
-	proc_stdin->write(p, len);
-	proc.close_stdin();
-	return proc.wait();
-}
-
-uint32_t	load_be32 (const unsigned char* p)
-{
-	return (static_cast<uint32_t>(p[3]) << 0) |
-	       (static_cast<uint32_t>(p[2]) << 8) |
-	       (static_cast<uint32_t>(p[1]) << 16) |
-	       (static_cast<uint32_t>(p[0]) << 24);
-}
-
-void		store_be32 (unsigned char* p, uint32_t i)
-{
-	p[3] = i; i >>= 8;
-	p[2] = i; i >>= 8;
-	p[1] = i; i >>= 8;
-	p[0] = i;
-}
-
-bool		read_be32 (std::istream& in, uint32_t& i)
-{
-	unsigned char buffer[4];
-	in.read(reinterpret_cast<char*>(buffer), 4);
-	if (in.gcount() != 4) {
-		return false;
-	}
-	i = load_be32(buffer);
-	return true;
-}
-
-void		write_be32 (std::ostream& out, uint32_t i)
-{
-	unsigned char buffer[4];
-	store_be32(buffer, i);
-	out.write(reinterpret_cast<const char*>(buffer), 4);
-}
-
-void*		explicit_memset (void* s, int c, std::size_t n)
-{
-	volatile unsigned char* p = reinterpret_cast<unsigned char*>(s);
-
-	while (n--) {
-		*p++ = c;
-	}
-
-	return s;
-}
-
 static void	init_std_streams_platform (); // platform-specific initialization
 
 void		init_std_streams ()

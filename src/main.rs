@@ -107,9 +107,9 @@ fn main() {
     if let Err(msg) = match cmd.as_ref() {
         "version" => print_version(&mut std::io::stderr()),
         "help" => help(cmd_args),
-        "smudge" => commands::smudge(cmd_args),
-        "diff" => commands::diff(cmd_args),
-        "clean" => commands::clean(cmd_args),
+        "smudge" => commands::smudge(cmd_args, working_dir.as_path()),
+        "diff" => commands::diff(cmd_args, working_dir.as_path()),
+        "clean" => commands::clean(cmd_args, working_dir.as_path()),
         "refresh" => commands::refresh(cmd_args),
         "rm-gpg-user" => commands::rm_gpg_user(cmd_args),
         "ls-gpg-users" => commands::ls_gpg_users(cmd_args),
@@ -122,6 +122,7 @@ fn main() {
             &::std::env::current_exe().unwrap(),
         ),
         "keygen" => commands::keygen(cmd_args),
+        "export-key" => commands::export_key(cmd_args, working_dir.as_path()),
         _ => {
             run_c_with_args(cpp_main, cmd, cmd_args);
             Ok(())
@@ -237,8 +238,7 @@ fn help_ls_gpg_users() {
     eprint!("Usage: git-crypt ls-gpg-users\n");
 }
 
-#[no_mangle]
-pub extern "C" fn help_export_key() {
+fn help_export_key() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt export-key [OPTIONS] FILENAME\n");
     eprint!("\n");

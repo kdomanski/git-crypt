@@ -31,7 +31,6 @@
 #include "git-crypt.hpp"
 #include "commands.hpp"
 #include "util.hpp"
-#include "key.hpp"
 #include "parse_options.hpp"
 #include <cstring>
 #include <unistd.h>
@@ -62,9 +61,6 @@ try {
 
 	try {
 		// Public commands:
-		if (std::strcmp(command, "export-key") == 0) {
-			return export_key(argc, argv);
-		}
 		if (std::strcmp(command, "status") == 0) {
 			return status(argc, argv);
 		}
@@ -82,12 +78,6 @@ try {
 	return 1;
 } catch (const System_error& e) {
 	std::cerr << "git-crypt: System error: " << e.message() << std::endl;
-	return 1;
-} catch (Key_file::Incompatible) {
-	std::cerr << "git-crypt: This repository contains a incompatible key file.  Please upgrade git-crypt." << std::endl;
-	return 1;
-} catch (Key_file::Malformed) {
-	std::cerr << "git-crypt: This repository contains a malformed key file.  It may be corrupted." << std::endl;
 	return 1;
 } catch (const std::ios_base::failure& e) {
 	std::cerr << "git-crypt: I/O error: " << e.what() << std::endl;

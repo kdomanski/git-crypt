@@ -51,17 +51,10 @@ struct System_error {
 
 int		exec_command (const std::vector<std::string>&);
 int		exec_command (const std::vector<std::string>&, std::ostream& output);
-int		exec_command_with_input (const std::vector<std::string>&, const char* p, size_t len);
 int		exit_status (int wait_status); // returns -1 if process did not exit (but was signaled, etc.)
 inline bool	successful_exit (int wait_status) { return exit_status(wait_status) == 0; }
 void		touch_file (const std::string&); // ignores non-existent files
-uint32_t	load_be32 (const unsigned char*);
-void		store_be32 (unsigned char*, uint32_t);
-bool		read_be32 (std::istream& in, uint32_t&);
-void		write_be32 (std::ostream& out, uint32_t);
-void*		explicit_memset (void* s, int c, size_t n);	// memset that won't be optimized away
 void		init_std_streams ();
-void		create_protected_file (const char* path); // create empty file accessible only by current user
 int		util_rename (const char*, const char*);
 
 #endif

@@ -18,6 +18,53 @@ const MAX_CRYPT_BYTES: u64 = (1u64 << 32) * 16;
 
 const MAX_INMEMORY_SIZE: u64 = 8388608;
 
+pub fn export_key(args: Vec<String>, repo: &Path) -> Result<(), String> {
+    let mut opts = getopts::Options::new();
+    opts.optopt("k", "key-name", "key name", "KEYNAME");
+
+    let matches = opts.parse(args.clone()).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        ::help_export_key();
+        std::process::exit(2);
+    });
+
+    let key_name = matches.opt_str("key-name");
+
+    if matches.free.len() != 1 {
+        eprintln!("Error: no filename specified");
+        ::help_export_key();
+        std::process::exit(2);
+    }
+
+    let target_filename = &matches.free[0];
+
+    export_key_run(
+        key_name.as_ref().map(String::as_str),
+        repo,
+        &target_filename,
+    )
+}
+
+fn export_key_run(
+    key_name: Option<&str>,
+    repo: &Path,
+    target_filename: &str,
+) -> Result<(), String> {
+    let key = load_key_from_repo(key_name, repo)?;
+    let data = key.store();
+
+    if target_filename == "-" {
+        ::std::io::stdout().write_all(&data)
+    } else {
+        let mut f = ::std::fs::File::create(target_filename)
+            .map_err(|e| format!("failed to create file '{:?}': {}", target_filename, e))?;
+        f.write_all(&data)
+
+    }.map_err(|e| format!("failed to write key data: {}", e))?;
+
+    Ok(())
+}
+
 // unlock will decrypt the keys, set up the filters and then decrypt the files.
 //
 // 'filter_binary' allows to force another binary path to be used as the filter.
@@ -576,21 +623,18 @@ fn parse_plumbing_options(
 }
 
 // Decrypt contents of stdin and write to stdout
-pub fn smudge(args: Vec<String>) -> Result<(), String> {
-    smudge_run(args).map_err(|e| format!("{}", e))
+pub fn smudge(args: Vec<String>, repo: &Path) -> Result<(), String> {
+    smudge_run(args, repo).map_err(|e| format!("{}", e))
 }
 
-fn smudge_run(args: Vec<String>) -> std::io::Result<()> {
+fn smudge_run(args: Vec<String>, repo: &Path) -> std::io::Result<()> {
     let (key_name, key_file, _remaining_args) =
         parse_plumbing_options(args).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))?;
 
     let key = if let Some(kf) = key_file {
         load_key_from_path(&Path::new(kf.as_str()))
     } else {
-        load_key_from_repo(
-            key_name.as_ref().map(String::as_str),
-            ::std::env::current_dir()?.as_path(),
-        )
+        load_key_from_repo(key_name.as_ref().map(String::as_str), repo)
     }
     .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
@@ -617,11 +661,11 @@ fn smudge_run(args: Vec<String>) -> std::io::Result<()> {
     }
 }
 
-pub fn diff(args: Vec<String>) -> Result<(), String> {
-    diff_run(args).map_err(|e| format!("{}", e))
+pub fn diff(args: Vec<String>, repo: &Path) -> Result<(), String> {
+    diff_run(args, repo).map_err(|e| format!("{}", e))
 }
 
-fn diff_run(args: Vec<String>) -> std::io::Result<()> {
+fn diff_run(args: Vec<String>, repo: &Path) -> std::io::Result<()> {
     let (key_name, key_file, remaining_args) =
         parse_plumbing_options(args).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))?;
 
@@ -638,10 +682,7 @@ fn diff_run(args: Vec<String>) -> std::io::Result<()> {
     let key = if let Some(kf) = key_file {
         load_key_from_path(&Path::new(kf.as_str()))
     } else {
-        load_key_from_repo(
-            key_name.as_ref().map(String::as_str),
-            ::std::env::current_dir()?.as_path(),
-        )
+        load_key_from_repo(key_name.as_ref().map(String::as_str), repo)
     }
     .map_err(|e| Error::new(ErrorKind::Other, e))?;
     let mut file = std::fs::File::open(remaining_args.first().unwrap())?;
@@ -721,23 +762,17 @@ fn load_key_from_repo(key_name: Option<&str>, repo: &Path) -> Result<::key::KeyF
 }
 
 // Encrypt contents of stdin and write to stdout
-pub fn clean(args: Vec<String>) -> Result<(), String> {
-    clean_run(args).map_err(|e| format!("{}", e))
+pub fn clean(args: Vec<String>, repo: &Path) -> Result<(), String> {
+    clean_run(args, repo).map_err(|e| format!("{}", e))
 }
 
-fn clean_run(args: Vec<String>) -> Result<(), String> {
+fn clean_run(args: Vec<String>, repo: &Path) -> Result<(), String> {
     let (key_name, key_file, _remaining_args) = parse_plumbing_options(args)?;
 
     let key = if let Some(kf) = key_file {
         load_key_from_path(&Path::new(kf.as_str()))
     } else {
-        load_key_from_repo(
-            key_name.as_ref().map(String::as_str),
-            // FIXME should get current_dir as a param
-            ::std::env::current_dir()
-                .map_err(|e| format!("failed to get current dir: {}", e))?
-                .as_path(),
-        )
+        load_key_from_repo(key_name.as_ref().map(String::as_str), repo)
     }?;
 
     encrypt_stream(&key, &mut std::io::stdin(), &mut std::io::stdout())
@@ -1774,5 +1809,19 @@ mod tests {
         assert_eq!(entry.version, 0);
         assert_ne!(&entry.aes_key[..], [0; ::key::AES_KEY_LEN]);
         assert_ne!(&entry.hmac_key[..], &[0; ::key::HMAC_KEY_LEN][..]);
+    }
+
+    #[test]
+    fn test_export_key() {
+        let tempdir = test_create_test_repo().unwrap();
+
+        let key_path = tempdir.path().join(".git/git-crypt/keys/default");
+        let key_file = ::key::KeyFile::from_file(&key_path).unwrap();
+
+        let target_path = tempdir.path().join("export");
+        export_key_run(None, tempdir.path(), target_path.to_str().unwrap()).unwrap();
+        let exported_key = ::key::KeyFile::from_file(&target_path).unwrap();
+
+        assert_eq!(exported_key, key_file);
     }
 }

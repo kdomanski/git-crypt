@@ -93,10 +93,6 @@ static void	init_std_streams_platform ()
 	_setmode(_fileno(stdout), _O_BINARY);
 }
 
-void create_protected_file (const char* path) // TODO
-{
-}
-
 int util_rename (const char* from, const char* to)
 {
 	// On Windows OS, it is necessary to ensure target file doesn't exist

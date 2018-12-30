@@ -30,7 +30,6 @@
 
 #include "commands.hpp"
 #include "util.hpp"
-#include "key.hpp"
 #include "parse_options.hpp"
 #include "coprocess.hpp"
 #include <unistd.h>
@@ -48,46 +47,6 @@
 #include <errno.h>
 #include <exception>
 #include <vector>
-
-static std::string get_internal_state_path ()
-{
-	// git rev-parse --git-dir
-	std::vector<std::string>	command;
-	command.push_back("git");
-	command.push_back("rev-parse");
-	command.push_back("--git-dir");
-
-	std::stringstream		output;
-
-	if (!successful_exit(exec_command(command, output))) {
-		throw Error("'git rev-parse --git-dir' failed - is this a Git repository?");
-	}
-
-	std::string			path;
-	std::getline(output, path);
-	path += "/git-crypt";
-
-	return path;
-}
-
-static std::string get_internal_keys_path (const std::string& internal_state_path)
-{
-	return internal_state_path + "/keys";
-}
-
-static std::string get_internal_keys_path ()
-{
-	return get_internal_keys_path(get_internal_state_path());
-}
-
-static std::string get_internal_key_path (const char* key_name)
-{
-	std::string		path(get_internal_keys_path());
-	path += "/";
-	path += key_name ? key_name : "default";
-
-	return path;
-}
 
 static std::string get_path_to_top ()
 {
@@ -211,57 +170,6 @@ static bool check_if_file_is_encrypted (const std::string& filename)
 static bool is_git_file_mode (const std::string& mode)
 {
 	return (std::strtoul(mode.c_str(), nullptr, 8) & 0170000) == 0100000;
-}
-
-static void load_key (Key_file& key_file, const char* key_name, const char* key_path =0)
-{
-	if (key_path) {
-		std::ifstream		key_file_in(key_path, std::fstream::binary);
-		if (!key_file_in) {
-			throw Error(std::string("Unable to open key file: ") + key_path);
-		}
-		key_file.load(key_file_in);
-	} else {
-		std::ifstream		key_file_in(get_internal_key_path(key_name).c_str(), std::fstream::binary);
-		if (!key_file_in) {
-			// TODO: include key name in error message
-			throw Error("Unable to open key file - have you unlocked/initialized this repository yet?");
-		}
-		key_file.load(key_file_in);
-	}
-}
-
-int export_key (int argc, const char** argv)
-{
-	// TODO: provide options to export only certain key versions
-	const char*		key_name = 0;
-	Options_list		options;
-	options.push_back(Option_def("-k", &key_name));
-	options.push_back(Option_def("--key-name", &key_name));
-
-	int			argi = parse_options(options, argc, argv);
-
-	if (argc - argi != 1) {
-		std::clog << "Error: no filename specified" << std::endl;
-		help_export_key();
-		return 2;
-	}
-
-	Key_file		key_file;
-	load_key(key_file, key_name);
-
-	const char*		out_file_name = argv[argi];
-
-	if (std::strcmp(out_file_name, "-") == 0) {
-		key_file.store(std::cout);
-	} else {
-		if (!key_file.store_to_file(out_file_name)) {
-			std::clog << "Error: " << out_file_name << ": unable to write key file" << std::endl;
-			return 1;
-		}
-	}
-
-	return 0;
 }
 
 int status (int argc, const char** argv)

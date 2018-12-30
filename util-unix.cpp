@@ -76,15 +76,6 @@ static void	init_std_streams_platform ()
 {
 }
 
-void	create_protected_file (const char* path)
-{
-	int	fd = open(path, O_WRONLY | O_CREAT, 0600);
-	if (fd == -1) {
-		throw System_error("open", path, errno);
-	}
-	close(fd);
-}
-
 int util_rename (const char* from, const char* to)
 {
 	return rename(from, to);
