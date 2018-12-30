@@ -60,20 +60,6 @@ int exec_command_with_input (const std::vector<std::string>& args, const char* p
 	return proc.wait();
 }
 
-std::string	escape_shell_arg (const std::string& str)
-{
-	std::string	new_str;
-	new_str.push_back('"');
-	for (std::string::const_iterator it(str.begin()); it != str.end(); ++it) {
-		if (*it == '"' || *it == '\\' || *it == '$' || *it == '`') {
-			new_str.push_back('\\');
-		}
-		new_str.push_back(*it);
-	}
-	new_str.push_back('"');
-	return new_str;
-}
-
 uint32_t	load_be32 (const unsigned char* p)
 {
 	return (static_cast<uint32_t>(p[3]) << 0) |

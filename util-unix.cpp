@@ -60,48 +60,6 @@ std::string System_error::message () const
 	return mesg;
 }
 
-void	mkdir_parent (const std::string& path)
-{
-	std::string::size_type		slash(path.find('/', 1));
-	while (slash != std::string::npos) {
-		std::string		prefix(path.substr(0, slash));
-		struct stat		status;
-		if (stat(prefix.c_str(), &status) == 0) {
-			// already exists - make sure it's a directory
-			if (!S_ISDIR(status.st_mode)) {
-				throw System_error("mkdir_parent", prefix, ENOTDIR);
-			}
-		} else {
-			if (errno != ENOENT) {
-				throw System_error("mkdir_parent", prefix, errno);
-			}
-			// doesn't exist - mkdir it
-			if (mkdir(prefix.c_str(), 0777) == -1) {
-				throw System_error("mkdir", prefix, errno);
-			}
-		}
-
-		slash = path.find('/', slash + 1);
-	}
-}
-
-std::string our_exe_path ()
-{
-	if (argv0[0] == '/') {
-		// argv[0] starts with / => it's an absolute path
-		return argv0;
-	} else if (std::strchr(argv0, '/')) {
-		// argv[0] contains / => it a relative path that should be resolved
-		char*		resolved_path_p = realpath(argv0, nullptr);
-		std::string	resolved_path(resolved_path_p);
-		free(resolved_path_p);
-		return resolved_path;
-	} else {
-		// argv[0] is just a bare filename => not much we can do
-		return argv0;
-	}
-}
-
 int	exit_status (int wait_status)
 {
 	return wait_status != -1 && WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : -1;
@@ -132,38 +90,3 @@ int util_rename (const char* from, const char* to)
 	return rename(from, to);
 }
 
-std::vector<std::string> get_directory_contents (const char* path)
-{
-	std::vector<std::string>		contents;
-
-	DIR*					dir = opendir(path);
-	if (!dir) {
-		throw System_error("opendir", path, errno);
-	}
-	try {
-		errno = 0;
-		// Note: readdir is reentrant in new implementations. In old implementations,
-		// it might not be, but git-crypt isn't multi-threaded so that's OK.
-		// We don't use readdir_r because it's buggy and deprecated:
-		//  https://womble.decadent.org.uk/readdir_r-advisory.html
-		//  http://austingroupbugs.net/view.php?id=696
-		//  http://man7.org/linux/man-pages/man3/readdir_r.3.html
-		while (struct dirent* ent = readdir(dir)) {
-			if (!(std::strcmp(ent->d_name, ".") == 0 || std::strcmp(ent->d_name, "..") == 0)) {
-				contents.push_back(ent->d_name);
-			}
-		}
-
-		if (errno) {
-			throw System_error("readdir", path, errno);
-		}
-
-	} catch (...) {
-		closedir(dir);
-		throw;
-	}
-	closedir(dir);
-
-	std::sort(contents.begin(), contents.end());
-	return contents;
-}

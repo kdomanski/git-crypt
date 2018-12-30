@@ -64,7 +64,6 @@ public:
 	void				load (std::istream&);
 	void				store (std::ostream&) const;
 
-	bool				load_from_file (const char* filename);
 	bool				store_to_file (const char* filename) const;
 
 	void				set_key_name (const char* k) { key_name = k ? k : ""; }

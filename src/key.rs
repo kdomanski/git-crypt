@@ -76,6 +76,75 @@ impl Entry {
         e
     }
 
+    pub fn from_stream(r: &mut ::std::io::Read) -> Result<Option<Entry>, Error> {
+        let mut buffer: Vec<u8> = Vec::with_capacity(MAX_FIELD_LEN);
+        buffer.resize(MAX_FIELD_LEN, 0);
+        let mut entry = Entry::new();
+        loop {
+            if let Err(e) = r.read_exact(&mut buffer[..4]) {
+                if e.kind() == ::std::io::ErrorKind::UnexpectedEof {
+                    return Ok(None);
+                }
+            }
+
+            let field_type = as_u32_be(&buffer[..4])?;
+
+            if field_type == KEY_FIELD_END {
+                break;
+            }
+
+            r.read_exact(&mut buffer[..4])?;
+            let field_len = as_u32_be(&buffer[..4])? as usize;
+
+            if field_len > MAX_FIELD_LEN {
+                return Err(Error::Malformed("field is too long".to_string()));
+            }
+
+            match field_type {
+                KEY_FIELD_VERSION => {
+                    if field_len != 4 {
+                        return Err(Error::Malformed(
+                            "key version field is not 4 bytes long".to_string(),
+                        ));
+                    }
+
+                    r.read_exact(&mut buffer[..4])?;
+                    entry.version = as_u32_be(&buffer[..4])?;
+                }
+                KEY_FIELD_AES_KEY => {
+                    if field_len != AES_KEY_LEN {
+                        return Err(Error::Malformed(format!(
+                            "AES field must be {} bytes long",
+                            AES_KEY_LEN
+                        )));
+                    }
+
+                    r.read_exact(&mut buffer[..AES_KEY_LEN])?;
+                    entry.aes_key.copy_from_slice(&buffer[..AES_KEY_LEN]);
+                }
+                KEY_FIELD_HMAC_KEY => {
+                    if field_len != HMAC_KEY_LEN {
+                        return Err(Error::Malformed(format!(
+                            "HMAC field must be {} bytes long",
+                            HMAC_KEY_LEN
+                        )));
+                    }
+
+                    r.read_exact(&mut buffer[..HMAC_KEY_LEN])?;
+                    entry.hmac_key.copy_from_slice(&buffer[..HMAC_KEY_LEN]);
+                }
+                _ => {
+                    if field_type & (1 as u32) == 1 {
+                        // unknown critical field
+                        return Err(Error::Incompatible);
+                    }
+                    // unknown non-critical field - safe to ignore
+                }
+            }
+        }
+        Ok(Some(entry))
+    }
+
     pub fn from_bytes(input: &[u8]) -> Result<(Entry, usize), Error> {
         let mut index: usize = 0;
         let mut entry = Entry::new();
@@ -195,6 +264,36 @@ impl Clone for Entry {
     }
 }
 
+impl ::std::cmp::PartialEq for Entry {
+    fn eq(&self, other: &Entry) -> bool {
+        if self.version != other.version {
+            return false;
+        }
+
+        if !self.aes_key.iter().eq(other.aes_key.iter()) {
+            return false;
+        }
+
+        if !self.hmac_key.iter().eq(other.hmac_key.iter()) {
+            return false;
+        }
+
+        return true;
+    }
+}
+
+impl ::std::fmt::Debug for Entry {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(
+            f,
+            "Entry {{ version: {:?}, aes_key: {:?}, hmac_key: {:?} }}",
+            self.version,
+            &self.aes_key[..],
+            &self.hmac_key[..]
+        )
+    }
+}
+
 pub struct KeyFile {
     pub key_name: Option<String>,
     pub entries: HashMap<u32, Entry>,
@@ -225,6 +324,65 @@ impl KeyFile {
         file.read_to_end(&mut contents)?;
 
         KeyFile::from_bytes(contents.as_slice())
+    }
+
+    pub fn from_stream(r: &mut ::std::io::Read) -> Result<KeyFile, Error> {
+        let mut preamble: [u8; 16] = [0; 16];
+        r.read_exact(&mut preamble).map_err(Error::IO)?;
+        if &preamble[..12] != "\0GITCRYPTKEY".as_bytes() {
+            return Err(Error::Malformed("incorrect preamble".to_string()));
+        }
+        if as_u32_be(&preamble[12..16])? != FORMAT_VERSION {
+            return Err(Error::Incompatible);
+        }
+
+        let mut kf = KeyFile::new();
+        let mut buffer: Vec<u8> = Vec::with_capacity(MAX_FIELD_LEN);
+        buffer.resize(MAX_FIELD_LEN, 0);
+
+        loop {
+            r.read_exact(&mut buffer[..4])?;
+            let field_type = as_u32_be(&buffer[..4])?;
+
+            if field_type == HEADER_FIELD_END {
+                break;
+            }
+
+            r.read_exact(&mut buffer[..4])?;
+            let field_len = as_u32_be(&buffer[..4])? as usize;
+
+            if field_len > MAX_FIELD_LEN {
+                return Err(Error::Malformed("field is too long".to_string()));
+            }
+
+            match field_type {
+                HEADER_FIELD_KEY_NAME => {
+                    r.read_exact(&mut buffer[..field_len])?;
+                    kf.key_name = match String::from_utf8(buffer[..field_len].to_vec()) {
+                        Ok(o) => Some(o),
+                        Err(_) => {
+                            return Err(Error::Malformed(
+                                "could not convert key name to UTF-8 string".to_string(),
+                            ));
+                        }
+                    };
+                }
+                _ => {
+                    if field_type & (1 as u32) == 1 {
+                        // unknown critical field
+                        return Err(Error::Incompatible);
+                    }
+                    // unknown non-critical field - safe to ignore
+                }
+            }
+        }
+
+        // TODO is there really no option to mark the end? must the stream be fully read?
+        while let Some(entry) = Entry::from_stream(r)? {
+            kf.entries.insert(entry.version, entry);
+        }
+
+        return Ok(kf);
     }
 
     pub fn from_bytes(input: &[u8]) -> Result<KeyFile, Error> {
@@ -344,6 +502,40 @@ impl KeyFile {
     }
 }
 
+impl ::std::cmp::PartialEq for KeyFile {
+    fn eq(&self, other: &KeyFile) -> bool {
+        if !self.key_name.eq(&other.key_name) {
+            return false;
+        }
+
+        if self.entries.len() != other.entries.len() {
+            return false;
+        }
+
+        for key in self.entries.keys() {
+            if !other.entries.contains_key(key) {
+                return false;
+            }
+
+            if self.entries[key] != other.entries[key] {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
+impl ::std::fmt::Debug for KeyFile {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(
+            f,
+            "KeyFile {{ key_name: {:?}, entries: {:?} }}",
+            self.key_name, self.entries
+        )
+    }
+}
+
 pub fn validate_key_name(key_name: &str) -> Result<(), String> {
     if key_name.is_empty() {
         return Err("Key name may not be empty".to_string());
@@ -428,6 +620,25 @@ mod tests {
     fn test_load_store_key() {
         let key =
             KeyFile::from_bytes(&TEST_KEY_DATA[..]).expect("expected the key to load successfully");
+
+        assert_eq!(key.key_name, None);
+        assert_eq!(key.entries.len(), 1);
+        assert!(key.entries.contains_key(&0));
+        assert_eq!(TEST_KEY_VERSION, key.entries[&0].version);
+        assert_eq!(TEST_KEY_AES, key.entries[&0].aes_key);
+        assert_eq!(TEST_KEY_HMAC[..], key.entries[&0].hmac_key[..]);
+
+        let stored_data = key.store();
+
+        assert!(stored_data.as_slice().eq(&TEST_KEY_DATA[..]));
+    }
+
+    #[test]
+    fn test_from_stream() {
+        let data: Vec<u8> = TEST_KEY_DATA.to_vec();
+
+        let key = KeyFile::from_stream(&mut data.as_slice())
+            .expect("expected the key to load successfully");
 
         assert_eq!(key.key_name, None);
         assert_eq!(key.entries.len(), 1);

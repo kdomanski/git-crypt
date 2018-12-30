@@ -32,7 +32,6 @@
 #include "commands.hpp"
 #include "util.hpp"
 #include "key.hpp"
-#include "gpg.hpp"
 #include "parse_options.hpp"
 #include <cstring>
 #include <unistd.h>
@@ -63,9 +62,6 @@ try {
 
 	try {
 		// Public commands:
-		if (std::strcmp(command, "unlock") == 0) {
-			return unlock(argc, argv);
-		}
 		if (std::strcmp(command, "export-key") == 0) {
 			return export_key(argc, argv);
 		}
@@ -83,9 +79,6 @@ try {
 
 } catch (const Error& e) {
 	std::cerr << "git-crypt: Error: " << e.message << std::endl;
-	return 1;
-} catch (const Gpg_error& e) {
-	std::cerr << "git-crypt: GPG error: " << e.message << std::endl;
 	return 1;
 } catch (const System_error& e) {
 	std::cerr << "git-crypt: System error: " << e.message() << std::endl;

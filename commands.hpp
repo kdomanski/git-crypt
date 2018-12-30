@@ -41,16 +41,11 @@ struct Error {
 };
 
 // Public commands:
-int unlock (int argc, const char** argv);
 int export_key (int argc, const char** argv);
 int status (int argc, const char** argv);
 
 // Help messages:
-extern "C" void help_unlock ();
 extern "C" void help_export_key ();
 extern "C" void help_status ();
-
-// other
-std::string get_git_config (const std::string& name);
 
 #endif

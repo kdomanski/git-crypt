@@ -219,16 +219,6 @@ void		Key_file::store (std::ostream& out) const
 	}
 }
 
-bool		Key_file::load_from_file (const char* key_file_name)
-{
-	std::ifstream	key_file_in(key_file_name, std::fstream::binary);
-	if (!key_file_in) {
-		return false;
-	}
-	load(key_file_in);
-	return true;
-}
-
 bool		Key_file::store_to_file (const char* key_file_name) const
 {
 	create_protected_file(key_file_name);

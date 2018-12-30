@@ -18,8 +18,182 @@ const MAX_CRYPT_BYTES: u64 = (1u64 << 32) * 16;
 
 const MAX_INMEMORY_SIZE: u64 = 8388608;
 
+// unlock will decrypt the keys, set up the filters and then decrypt the files.
+//
+// 'filter_binary' allows to force another binary path to be used as the filter.
+// This is necessary for testing, since cargo test binaries have their own parameters and functionality.
+// Without the overwrite, the filters would just write the test summary to target files.
+pub fn unlock(args: Vec<String>, working_dir: &Path, filter_binary: &Path) -> Result<(), String> {
+    // 1. Make sure working directory is clean (ignoring untracked files)
+    // We do this because we check out files later, and we don't want the
+    // user to lose any changes.  (TODO: only care if encrypted files are
+    // modified, since we only check out encrypted files)
+
+    // Running 'git status' also serves as a check that the Git repo is accessible.
+    let clean = ::git::get_git_status(working_dir, &mut std::io::stderr())?;
+    if !clean {
+        return Err(format!(
+            "Error: Working directory not clean.\
+             Please commit your changes or 'git stash' them before running 'git-crypt unlock'."
+        ));
+    }
+
+    let mut key_files: Vec<::key::KeyFile> = Vec::new();
+
+    // 2. Load the key(s)
+    if !args.is_empty() {
+        // Read from the symmetric key file(s)
+        for arg in args {
+            let keyfile = if &arg == "-" {
+                ::key::KeyFile::from_stream(&mut std::io::stdin())
+            } else {
+                let pp = Path::new(&arg);
+                let file_path = if pp.is_absolute() {
+                    pp.to_path_buf()
+                } else {
+                    working_dir.join(pp)
+                };
+
+                ::key::KeyFile::from_file(&file_path)
+            }
+            .map_err(|e| format!("failed to load key from '{:?}': {}", &arg, e))?;
+
+            key_files.push(keyfile);
+        }
+    } else {
+        let repo_keys_path: std::path::PathBuf = get_repo_keys_path(working_dir)?;
+        let gpg_secret_keys: Vec<String> = ::gpg::gpg_list_secret_keys(working_dir)?;
+
+        // TODO: command-line option to specify the precise secret key to use
+        // TODO: don't hard code key version 0 here - instead, determine the most recent version and try to decrypt that, or decrypt all versions if command-line option specified
+        // TODO: command line option to only unlock specific key instead of all of them
+        // TODO: avoid decrypting repo keys which are already unlocked in the .git directory
+        key_files = decrypt_repo_keys(working_dir, 0, gpg_secret_keys.as_slice(), &repo_keys_path)
+            .map_err(|e| format!("Failed to decrypt repo keys: {}", e))?;
+    }
+
+    // 3. Install the key(s) and configure the git filters
+    let mut encrypted_files: Vec<String> = Vec::new();
+    for key in key_files {
+        let kn = key.key_name.as_ref().map(|x| x.as_str());
+
+        let internal_key_path = ::git::get_internal_key_path(working_dir, kn)?;
+
+        // TODO: croak if internal_key_path already exists???
+        let key_path_parent = Path::new(&internal_key_path).parent();
+        std::fs::create_dir_all(key_path_parent.map(Path::to_str).unwrap().unwrap())
+            .unwrap_or_else(|e| {
+                eprintln!("failed create internal key path: {}", e);
+                std::process::exit(1);
+            });
+
+        let mut file = std::fs::File::create(&internal_key_path).map_err(|e| {
+            format!(
+                "failed create file {:?} for the key: {}",
+                &internal_key_path, e
+            )
+        })?;
+
+        file.write_all(key.store().as_slice())
+            .map_err(|e| format!("failed write key data: {}", e))?;
+
+        configure_git_filters(working_dir, kn, filter_binary)
+            .map_err(|e| format!("failed to configure git filters: {}", e))?;
+        let mut additional_encrypted_files = get_encrypted_files(working_dir, kn)?;
+        encrypted_files.append(&mut additional_encrypted_files);
+    }
+
+    // 4. Check out the files that are currently encrypted.
+    // Git won't check out a file if its mtime hasn't changed, so touch every file first.
+    encrypted_files
+        .iter()
+        .try_for_each(|f| touch_file(&working_dir.join(f)))?;
+    if let Err(e) = ::git::git_checkout(
+        working_dir,
+        encrypted_files.iter().map(String::as_str).collect(),
+    ) {
+        eprintln!("Error: 'git checkout' failed");
+        eprintln!("git-crypt has been set up but existing encrypted files have not been decrypted");
+        return Err(e);
+    }
+
+    Ok(())
+}
+
 fn get_repo_keys_path(repo: &Path) -> Result<std::path::PathBuf, String> {
     ::git::get_repo_state_path(repo).map(|p| p.join("keys"))
+}
+
+fn decrypt_repo_keys(
+    repo: &Path,
+    key_version: u32,
+    secret_keys: &[String],
+    keys_path: &Path,
+) -> Result<Vec<::key::KeyFile>, String> {
+    let dirents =
+        std::fs::read_dir(keys_path).map_err(|e| format!("read_dir {:?}: {}", keys_path, e))?;
+
+    let foo: Result<Vec<Option<::key::KeyFile>>, String> = dirents
+        .map(|d| -> Result<Option<::key::KeyFile>, String> {
+            let os_file_name = d.unwrap().file_name();
+            let file_name: &str = if let Some(o) = os_file_name.to_str() {
+                o
+            } else {
+                return Err(format!("Failed to convert directory name to str"));
+            };
+            let key_name = if file_name == "default" {
+                None
+            } else {
+                if ::key::validate_key_name(file_name).is_err() {
+                    return Ok(None);
+                }
+
+                Some(file_name)
+            };
+
+            decrypt_repo_key(repo, key_name, key_version, secret_keys, keys_path)
+        })
+        .collect();
+
+    let r: Result<Vec<::key::KeyFile>, String> = foo.map(|x| x.into_iter().flatten().collect());
+    r
+}
+
+fn decrypt_repo_key(
+    repo: &Path,
+    key_name: Option<&str>,
+    key_version: u32,
+    secret_keys: &[String],
+    keys_path: &Path,
+) -> Result<Option<::key::KeyFile>, String> {
+    for key in secret_keys {
+        let path = keys_path
+            .join(key_name.unwrap_or("default"))
+            .join(key_version.to_string())
+            .join(format!("{}.gpg", key));
+        let decrypted_contents = match ::gpg::gpg_decrypt_from_file(repo, path.to_str().unwrap()) {
+            Ok(o) => o,
+            Err(_) => continue,
+        };
+
+        let k = ::key::KeyFile::from_bytes(decrypted_contents.as_slice())
+            .map_err(|e| format!("failed to read key from bytes: {:?}", e))?;
+
+        if !k.entries.contains_key(&key_version) {
+            return Err( "GPG-encrypted keyfile is malformed because it does not contain expected key version".to_string());
+        }
+
+        if k.key_name != key_name.map(|x| x.to_string()) {
+            return Err(
+                "GPG-encrypted keyfile is malformed because it does not contain expected key name"
+                    .to_string(),
+            );
+        }
+
+        return Ok(Some(k));
+    }
+
+    Ok(None)
 }
 
 pub fn lock(args: Vec<String>, repo: &Path) -> Result<(), String> {
@@ -320,8 +494,12 @@ fn get_file_attributes(
     Ok((filter, diff))
 }
 
-fn configure_git_filters(repo: &Path, key_name: Option<&str>) -> std::io::Result<()> {
-    let escaped_git_crypt_path = ::util::escape_shell_arg(&std::env::args().nth(0).unwrap());
+fn configure_git_filters(
+    repo: &Path,
+    key_name: Option<&str>,
+    filter_binary: &Path,
+) -> std::io::Result<()> {
+    let escaped_git_crypt_path = ::util::escape_shell_arg(filter_binary.to_str().unwrap());
 
     if let Some(kn) = key_name {
         ::git::git_config(
@@ -692,16 +870,19 @@ pub fn run_init(args: Vec<String>, repo: &Path) -> Result<(), String> {
 
     let key_name = matches.opt_str("key-name");
 
-    init(key_name, repo)
+    init(
+        key_name.as_ref().map(String::as_str),
+        repo,
+        &::std::env::current_exe().unwrap(),
+    )
 }
 
-fn init(key_name: Option<String>, repo: &Path) -> Result<(), String> {
+fn init(key_name: Option<&str>, repo: &Path, filter_binary: &Path) -> Result<(), String> {
     if let Some(s) = key_name.as_ref() {
         ::key::validate_key_name(s)?;
     }
 
-    let internal_key_path: ::std::path::PathBuf =
-        ::git::get_internal_key_path(repo, key_name.as_ref().map(|s| s.as_str()))?;
+    let internal_key_path: ::std::path::PathBuf = ::git::get_internal_key_path(repo, key_name)?;
 
     if Path::new(&internal_key_path).exists() {
         // TODO: add a -f option to reinitialize the repo anyways (this should probably imply a refresh)
@@ -713,7 +894,7 @@ fn init(key_name: Option<String>, repo: &Path) -> Result<(), String> {
 
     // 1. Generate a key and install it
     eprintln!("Generating key...");
-    let key = ::key::KeyFile::generate(key_name.clone());
+    let key = ::key::KeyFile::generate(key_name.map(&str::to_string));
 
     let parent = internal_key_path.parent().unwrap();
     std::fs::create_dir_all(parent)
@@ -729,7 +910,7 @@ fn init(key_name: Option<String>, repo: &Path) -> Result<(), String> {
         .map_err(|e| format!("failed to write key file: {}", e))?;
 
     // 2. Configure git for git-crypt
-    configure_git_filters(repo, key_name.as_ref().map(String::as_str))
+    configure_git_filters(repo, key_name, filter_binary)
         .map_err(|e| format!("failed to configure git filters: {}", e))?;
 
     eprintln!("Done.");
@@ -1063,6 +1244,9 @@ mod tests {
 
     fn test_create_test_repo() -> Result<::tempfile::TempDir, std::io::Error> {
         let dir = ::tempfile::tempdir()?;
+        let bin = ::std::env::current_dir()
+            .unwrap()
+            .join("target/debug/git-crypt");
 
         assert!(::std::process::Command::new("git")
             .arg("init")
@@ -1074,7 +1258,8 @@ mod tests {
         let pack_dir_path = dir.path().join(Path::new(".git/objects/pack"));
         assert!(pack_dir_path.is_dir());
 
-        init(None, dir.path()).unwrap();
+        init(None, dir.path(), &bin).unwrap();
+        init(Some("fookey"), dir.path(), &bin).unwrap();
 
         // create .gitattributes file and commit it
         let mut f = ::std::fs::File::create(dir.path().join(".gitattributes")).unwrap();
@@ -1116,15 +1301,17 @@ mod tests {
             panic!("{:?}: {}", key_path, e);
         }
 
-        let bin_name = &std::env::args().nth(0).unwrap();
+        let bin_name = ::std::env::current_dir()
+            .unwrap()
+            .join("target/debug/git-crypt");
 
         assert_eq!(
             ::git::get_git_config(tempdir.path(), "filter.git-crypt.smudge").unwrap(),
-            format!("\"{}\" smudge", bin_name)
+            format!("\"{}\" smudge", bin_name.to_str().unwrap())
         );
         assert_eq!(
             ::git::get_git_config(tempdir.path(), "filter.git-crypt.clean").unwrap(),
-            format!("\"{}\" clean", bin_name)
+            format!("\"{}\" clean", bin_name.to_str().unwrap())
         );
         assert_eq!(
             ::git::get_git_config(tempdir.path(), "filter.git-crypt.required").unwrap(),
@@ -1132,7 +1319,7 @@ mod tests {
         );
         assert_eq!(
             ::git::get_git_config(tempdir.path(), "diff.git-crypt.textconv").unwrap(),
-            format!("\"{}\" diff", bin_name)
+            format!("\"{}\" diff", bin_name.to_str().unwrap())
         );
     }
 
@@ -1164,19 +1351,54 @@ mod tests {
 
         let decrypted_key = ::key::KeyFile::from_bytes(&output.stdout).unwrap();
 
-        assert_eq!(decrypted_key.key_name, key_file.key_name);
-        assert_eq!(1, decrypted_key.entries.len());
-        assert_eq!(1, decrypted_key.entries.len());
+        assert_eq!(decrypted_key, key_file);
+    }
 
-        let decrypted_key_entry = decrypted_key.get_latest().unwrap();
-        let key_file_entry = key_file.get_latest().unwrap();
+    #[test]
+    fn test_dencrypt_repo_keys() {
+        let tempdir = test_create_test_repo().unwrap();
 
-        assert_eq!(decrypted_key_entry.version, key_file_entry.version);
-        assert_eq!(decrypted_key_entry.aes_key[..], key_file_entry.aes_key[..]);
-        assert_eq!(
-            decrypted_key_entry.hmac_key[..],
-            key_file_entry.hmac_key[..]
-        );
+        let key_path_default = tempdir.path().join(".git/git-crypt/keys/default");
+        let key_path_fookey = tempdir.path().join(".git/git-crypt/keys/fookey");
+        let key_file_default = ::key::KeyFile::from_file(&key_path_default).unwrap();
+        let key_file_fookey = ::key::KeyFile::from_file(&key_path_fookey).unwrap();
+
+        let collab_keys: Vec<(String, bool)> =
+            vec![(::gpg::tests::TEST_KEY_FINGERPRINT.to_string(), true)];
+        let entry_default = key_file_default.get_latest().unwrap();
+        let entry_fookey = key_file_fookey.get_latest().unwrap();
+
+        let new_files =
+            encrypt_repo_key(None, &entry_default, &collab_keys, tempdir.path()).unwrap();
+        let encrypted_key_path = tempdir
+            .path()
+            .join(".git-crypt/keys/default/0/26AC6DD34577BEDD4A47A38A2343E74AB0BDF29F.gpg");
+        assert_eq!(1, new_files.len());
+        assert_eq!(new_files[0], encrypted_key_path);
+
+        let new_files =
+            encrypt_repo_key(Some("fookey"), &entry_fookey, &collab_keys, tempdir.path()).unwrap();
+        let encrypted_key_path = tempdir
+            .path()
+            .join(".git-crypt/keys/fookey/0/26AC6DD34577BEDD4A47A38A2343E74AB0BDF29F.gpg");
+        assert_eq!(1, new_files.len());
+        assert_eq!(new_files[0], encrypted_key_path);
+
+        ::std::fs::remove_file(&key_path_default).unwrap();
+        ::std::fs::remove_file(&key_path_fookey).unwrap();
+
+        let repo_keys_path = get_repo_keys_path(tempdir.path()).unwrap();
+        let secret_keys = vec!["26AC6DD34577BEDD4A47A38A2343E74AB0BDF29F".to_string()];
+        let mut decrypted_keys =
+            decrypt_repo_keys(tempdir.path(), 0, &secret_keys, &repo_keys_path).unwrap();
+
+        assert_eq!(decrypted_keys.len(), 2);
+        decrypted_keys.sort_by(|a, b| a.key_name.cmp(&b.key_name));
+
+        assert_eq!(decrypted_keys[0], key_file_default);
+        assert_eq!(decrypted_keys[1], key_file_fookey);
+        assert_ne!(decrypted_keys[1], key_file_default);
+        assert_ne!(decrypted_keys[0], key_file_fookey);
     }
 
     #[test]
@@ -1210,19 +1432,7 @@ mod tests {
 
         let decrypted_key = ::key::KeyFile::from_bytes(&output.stdout).unwrap();
 
-        assert_eq!(decrypted_key.key_name, key_file.key_name);
-        assert_eq!(1, decrypted_key.entries.len());
-        assert_eq!(1, decrypted_key.entries.len());
-
-        let decrypted_key_entry = decrypted_key.get_latest().unwrap();
-        let key_file_entry = key_file.get_latest().unwrap();
-
-        assert_eq!(decrypted_key_entry.version, key_file_entry.version);
-        assert_eq!(decrypted_key_entry.aes_key[..], key_file_entry.aes_key[..]);
-        assert_eq!(
-            decrypted_key_entry.hmac_key[..],
-            key_file_entry.hmac_key[..]
-        );
+        assert_eq!(decrypted_key, key_file);
 
         let git_log_out = std::process::Command::new("git")
             .arg("log")
@@ -1318,17 +1528,17 @@ mod tests {
     fn test_configure_git_filters() {
         let tempdir = test_create_test_repo().unwrap();
         let repo = tempdir.path();
-        let bin = std::env::args().nth(0).unwrap();
+        let bin = Path::new("/bin/no-such-binary");
 
         // default key
-        configure_git_filters(repo, None).unwrap();
+        configure_git_filters(repo, None, bin).unwrap();
         assert_eq!(
             ::git::get_git_config(repo, "filter.git-crypt.smudge").unwrap(),
-            format!("\"{}\" smudge", bin)
+            "\"/bin/no-such-binary\" smudge"
         );
         assert_eq!(
             ::git::get_git_config(repo, "filter.git-crypt.clean").unwrap(),
-            format!("\"{}\" clean", bin)
+            "\"/bin/no-such-binary\" clean"
         );
         assert_eq!(
             ::git::get_git_config(repo, "filter.git-crypt.required").unwrap(),
@@ -1336,7 +1546,7 @@ mod tests {
         );
         assert_eq!(
             ::git::get_git_config(repo, "diff.git-crypt.textconv").unwrap(),
-            format!("\"{}\" diff", bin)
+            "\"/bin/no-such-binary\" diff"
         );
 
         // remove
@@ -1359,14 +1569,14 @@ mod tests {
         );
 
         // key named 'abc'
-        configure_git_filters(repo, Some("abc")).unwrap();
+        configure_git_filters(repo, Some("abc"), bin).unwrap();
         assert_eq!(
             ::git::get_git_config(repo, "filter.git-crypt-abc.smudge").unwrap(),
-            format!("\"{}\" smudge --key-name=abc", bin)
+            "\"/bin/no-such-binary\" smudge --key-name=abc"
         );
         assert_eq!(
             ::git::get_git_config(repo, "filter.git-crypt-abc.clean").unwrap(),
-            format!("\"{}\" clean --key-name=abc", bin)
+            "\"/bin/no-such-binary\" clean --key-name=abc"
         );
         assert_eq!(
             ::git::get_git_config(repo, "filter.git-crypt-abc.required").unwrap(),
@@ -1374,7 +1584,7 @@ mod tests {
         );
         assert_eq!(
             ::git::get_git_config(repo, "diff.git-crypt-abc.textconv").unwrap(),
-            format!("\"{}\" diff --key-name=abc", bin)
+            "\"/bin/no-such-binary\" diff --key-name=abc"
         );
 
         // remove for key 'abc'
@@ -1456,8 +1666,91 @@ mod tests {
             .read_to_end(&mut data_nocrypt)
             .unwrap();
 
+        assert_eq!(data_nocrypt.as_slice(), "some more data".as_bytes());
+        assert_ne!(data_nocrypt.as_slice(), "some data".as_bytes());
+        assert_eq!(data_crypt.len(), 31);
+    }
+
+    #[test]
+    fn test_lock_unlock_default() {
+        let tempdir = test_create_test_repo().unwrap();
+        let binary = ::std::env::current_dir()
+            .unwrap()
+            .join("target/debug/git-crypt");
+
+        // create some files and commit them
+        let mut f = ::std::fs::File::create(tempdir.path().join("somefile.txt")).unwrap();
+        f.write_all("some data".as_bytes()).unwrap();
+        f.sync_all().unwrap();
+        f = ::std::fs::File::create(tempdir.path().join("somefile.nocrypt")).unwrap();
+        f.write_all("some more data".as_bytes()).unwrap();
+        f.sync_all().unwrap();
+
+        std::process::Command::new("git")
+            .arg("add")
+            .arg("somefile.txt")
+            .arg("somefile.nocrypt")
+            .current_dir(tempdir.path())
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("commit")
+            .arg("--no-gpg-sign")
+            .arg("-m")
+            .arg("test commit please ignore")
+            .current_dir(tempdir.path())
+            .output()
+            .unwrap();
+
+        // we need to add a user, so that we can unlock the repo later
+        ::git::git_config(tempdir.path(), "commit.gpgsign", "false").unwrap();
+        add_gpg_user_run(
+            tempdir.path(),
+            None,
+            false,
+            true,
+            vec!["Test Identity <test@example.com>".to_string()],
+        )
+        .unwrap();
+
+        lock_run(tempdir.path(), None, false, false).unwrap();
+        // the lock is already tested by test_lock_default()
+
+        unlock(Vec::new(), tempdir.path(), &binary).unwrap();
+
+        // check the filters
+        assert_eq!(
+            ::git::get_git_config(tempdir.path(), "filter.git-crypt.smudge").unwrap(),
+            format!("\"{}\" smudge", binary.to_str().unwrap())
+        );
+        assert_eq!(
+            ::git::get_git_config(tempdir.path(), "filter.git-crypt.clean").unwrap(),
+            format!("\"{}\" clean", binary.to_str().unwrap())
+        );
+        assert_eq!(
+            ::git::get_git_config(tempdir.path(), "filter.git-crypt.required").unwrap(),
+            "true"
+        );
+        assert_eq!(
+            ::git::get_git_config(tempdir.path(), "diff.git-crypt.textconv").unwrap(),
+            format!("\"{}\" diff", binary.to_str().unwrap())
+        );
+
+        // now we're interested in whether 'somefile.txt' is cleartext again
+        let mut data_crypt: Vec<u8> = Vec::new();
+        let mut data_nocrypt: Vec<u8> = Vec::new();
+
+        std::fs::File::open(tempdir.path().join("somefile.txt"))
+            .unwrap()
+            .read_to_end(&mut data_crypt)
+            .unwrap();
+        std::fs::File::open(tempdir.path().join("somefile.nocrypt"))
+            .unwrap()
+            .read_to_end(&mut data_nocrypt)
+            .unwrap();
+
         assert!(data_nocrypt.as_slice().eq("some more data".as_bytes()));
-        assert_eq!(data_crypt.len(), 95);
+        assert_eq!(data_crypt.as_slice(), "some data".as_bytes());
     }
 
     #[test]

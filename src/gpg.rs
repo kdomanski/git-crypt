@@ -1,6 +1,7 @@
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
+use std::io::{Error, ErrorKind};
 use std::path::Path;
 
 fn gpg_get_executable(repo: &Path) -> String {
@@ -8,6 +9,61 @@ fn gpg_get_executable(repo: &Path) -> String {
         Ok(o) => o.trim().to_string(),
         Err(_) => String::from("gpg".to_string()),
     }
+}
+
+pub fn gpg_list_secret_keys(repo: &Path) -> Result<Vec<String>, String> {
+    // gpg --batch --with-colons --list-secret-keys --fingerprint
+    let output = std::process::Command::new(gpg_get_executable(repo))
+        .arg("--batch")
+        .arg("--with-colons")
+        .arg("--list-secret-keys")
+        .arg("--fingerprint")
+        .current_dir(repo) // not really needed, but whatever
+        .output()
+        .map_err(|e| {
+            format!(
+                "failed to run gpg --batch --with-colons --list-secret-keys --fingerprint: {}",
+                e
+            )
+        })?;
+    if !output.status.success() {
+        return Err(format!(
+            "gpg --batch --with-colons --list-secret-keys --fingerprint failed"
+        ));
+    }
+
+    let b: BufReader<&[u8]> = std::io::BufReader::new(&output.stdout[..]);
+
+    let fpr_lines: Vec<String> = b
+        .lines()
+        .filter_map(Result::ok)
+        .filter(|x| x.starts_with("fpr:"))
+        .collect();
+    let fpr_splits = fpr_lines
+        .iter()
+        .map(|x: &String| x.split(":").collect::<Vec<&str>>());
+    Ok(fpr_splits
+        .filter_map(|x| x.get(9).map(|x| x.to_string()))
+        .collect())
+}
+
+pub fn gpg_decrypt_from_file(repo: &Path, filename: &str) -> std::io::Result<Vec<u8>> {
+    // gpg -q -d FILENAME
+    let output = std::process::Command::new(gpg_get_executable(repo))
+        .arg("-q")
+        .arg("-d")
+        .arg(filename)
+        .current_dir(repo)
+        .output()?;
+    if !output.status.success() {
+        let stderr_string = String::from_utf8(output.stderr).unwrap();
+        return Err(Error::new(
+            ErrorKind::Other,
+            format!("Failed to decrypt: {}", stderr_string),
+        ));
+    }
+
+    Ok(output.stdout)
 }
 
 pub fn gpg_lookup_key(repo: &Path, query: &str) -> Result<Vec<String>, String> {

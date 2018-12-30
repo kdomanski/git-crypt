@@ -116,7 +116,11 @@ fn main() {
         "init" => commands::run_init(cmd_args, working_dir.as_path()),
         "add-gpg-user" => commands::add_gpg_user(cmd_args, working_dir.as_path()),
         "lock" => commands::lock(cmd_args, &working_dir),
-        //"unlock" => commands::unlock(cmd_args, working_dir.as_path()),
+        "unlock" => commands::unlock(
+            cmd_args,
+            working_dir.as_path(),
+            &::std::env::current_exe().unwrap(),
+        ),
         "keygen" => commands::keygen(cmd_args),
         _ => {
             run_c_with_args(cpp_main, cmd, cmd_args);
@@ -126,12 +130,6 @@ fn main() {
         eprintln!("{}", msg);
         std::process::exit(1);
     }
-
-    // catch (const Option_error& e) {
-    // 	std::clog << "git-crypt: Error: " << e.option_name << ": " << e.message << std::endl;
-    // 	help_for_command(command, std::clog);
-    // 	return 2;
-    // }
 }
 
 fn run_c_with_args(
@@ -199,8 +197,7 @@ fn help_init() {
     eprint!("\n");
 }
 
-#[no_mangle]
-pub extern "C" fn help_unlock() {
+fn help_unlock() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt unlock\n");
     eprint!("   or: git-crypt unlock KEY_FILE ...\n");
