@@ -123,6 +123,7 @@ fn main() {
         ),
         "keygen" => commands::keygen(cmd_args),
         "export-key" => commands::export_key(cmd_args, working_dir.as_path()),
+        "status" => commands::status(cmd_args, working_dir.as_path()),
         _ => {
             run_c_with_args(cpp_main, cmd, cmd_args);
             Ok(())

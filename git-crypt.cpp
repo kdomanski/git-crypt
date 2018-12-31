@@ -60,10 +60,7 @@ try {
 	++argv;
 
 	try {
-		// Public commands:
-		if (std::strcmp(command, "status") == 0) {
-			return status(argc, argv);
-		}
+
 	} catch (const Option_error& e) {
 		std::clog << "git-crypt: Error: " << e.option_name << ": " << e.message << std::endl;
 		//help_for_command(command, std::clog);

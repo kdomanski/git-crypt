@@ -1,7 +1,7 @@
 use std::io::BufRead;
 use std::io::Seek;
+use std::io::{BufReader, Read, Write};
 use std::io::{Error, ErrorKind};
-use std::io::{Read, Write};
 use std::path::Path;
 
 extern crate crypto;
@@ -17,6 +17,326 @@ const NONCE_LEN: usize = 12;
 const MAX_CRYPT_BYTES: u64 = (1u64 << 32) * 16;
 
 const MAX_INMEMORY_SIZE: u64 = 8388608;
+
+pub fn status(args: Vec<String>, repo: &Path) -> Result<(), String> {
+    // Usage:
+    //  git-crypt status -r [-z]			Show repo status
+    //  git-crypt status [-e | -u] [-z] [FILE ...]	Show encrypted status of files
+    //  git-crypt status -f				Fix unencrypted blobs
+    let mut opts = getopts::Options::new();
+    opts.optflag("r", "", "");
+    opts.optflag("e", "", "");
+    opts.optflag("u", "", "");
+    opts.optflag("f", "fix", "");
+    opts.optflag("z", "", "");
+
+    let matches = opts.parse(args.clone()).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        ::help_status();
+        std::process::exit(2);
+    });
+
+    let repo_status_only = matches.opt_present("r"); // -r show repo status only
+    let show_encrypted_only = matches.opt_present("e"); // -e show encrypted files only
+    let show_unencrypted_only = matches.opt_present("u"); // -u show unencrypted files only
+    let fix_problems = matches.opt_present("fix"); // -f fix problems
+    let machine_output = matches.opt_present("z"); // -z machine-parseable output
+
+    if repo_status_only {
+        if show_encrypted_only || show_unencrypted_only {
+            eprintln!("Error: -e and -u options cannot be used with -r");
+            ::help_status();
+            ::std::process::exit(2);
+        }
+        if fix_problems {
+            eprintln!("Error: -f option cannot be used with -r");
+            ::help_status();
+            ::std::process::exit(2);
+        }
+        if !matches.free.is_empty() {
+            eprintln!("Error: filenames cannot be specified when -r is used");
+            ::help_status();
+            ::std::process::exit(2);
+        }
+    }
+
+    if show_encrypted_only && show_unencrypted_only {
+        eprintln!("Error: -e and -u options are mutually exclusive");
+        ::help_status();
+        ::std::process::exit(2);
+    }
+
+    if fix_problems && (show_encrypted_only || show_unencrypted_only) {
+        eprintln!("Error: -e and -u options cannot be used with -f");
+        ::help_status();
+        ::std::process::exit(2);
+    }
+
+    if machine_output {
+        // TODO: implement machine-parseable output
+        unimplemented!("Sorry, machine-parseable output is not yet implemented");
+    }
+
+    if matches.free.is_empty() {
+        // TODO: check repo status:
+        //	is it set up for git-crypt?
+        //	which keys are unlocked?
+        //	--> check for filter config (see configure_git_filters()) and corresponding internal key
+        if repo_status_only {
+            return Ok(());
+        }
+    }
+
+    status_run(
+        repo,
+        matches.free,
+        fix_problems,
+        show_encrypted_only,
+        show_unencrypted_only,
+    )
+}
+
+fn blob_is_encrypted(repo: &Path, name: &str) -> Result<bool, String> {
+    // git cat-file blob object_id
+    let output = std::process::Command::new("git")
+        .arg("cat-file")
+        .arg("blob")
+        .arg(name)
+        .current_dir(repo)
+        .output()
+        .map_err(|e| {
+            format!(
+                "`git cat-file blob object_id {}` failed to run: {}",
+                name, e
+            )
+        })?;;
+
+    if output.status.success() {
+        Ok(&output.stdout[..10] == "\0GITCRYPT\0".as_bytes())
+    } else {
+        Err(format!("'`git cat-file blob object_id {}` failed", name))
+    }
+}
+
+fn file_is_encrypted(repo: &Path, name: &str) -> Result<bool, String> {
+    // git ls-files -sz filename
+    let output = std::process::Command::new("git")
+        .arg("ls-files")
+        .arg("-sz")
+        .arg("--")
+        .arg(name)
+        .current_dir(repo)
+        .output()
+        .map_err(|e| format!("`git ls-files -sz {}` failed to run: {}", name, e))?;
+
+    if output.status.success() {
+        let mut b = std::io::BufReader::new(&output.stdout[..]);
+        let mut buf = String::new();
+        b.read_line(&mut buf)
+            .map_err(|e| format!("file_is_encrypted(): failed to read output line: {}", e))?;
+        let split = buf.split_whitespace().collect::<Vec<&str>>();
+        let object_id = split[1];
+        blob_is_encrypted(repo, object_id)
+    } else {
+        Err(format!("'`git cat-file blob object_id {}` failed", name))
+    }
+}
+
+fn status_run(
+    repo: &Path,
+    args: Vec<String>,
+    fix_problems: bool,
+    show_encrypted_only: bool,
+    show_unencrypted_only: bool,
+) -> Result<(), String> {
+    // git ls-files -cotsz --exclude-standard ...
+    let mut cmd = std::process::Command::new("git");
+    let o1 = cmd
+        .arg("ls-files")
+        .arg("-cotsz")
+        .arg("--exclude-standard")
+        .arg("--");
+    let output = if args.is_empty() {
+        let path_to_top = ::git::get_path_to_top(repo)?;
+        o1.arg(path_to_top.to_str().unwrap())
+    } else {
+        o1.args(args)
+    }
+    .current_dir(repo)
+    .output()
+    .map_err(|e| format!("`git ls-files -cotsz --exclude-standard ...` failed: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "`git ls-files -cotsz --exclude-standard ...` failed"
+        ));
+    }
+
+    // Output looks like (w/o newlines):
+    // ? .gitignore\0
+    // H 100644 06ec22e5ed0de9280731ef000a10f9c3fbc26338 0     afile\0
+
+    let mut output_buffered: BufReader<&[u8]> = std::io::BufReader::new(&output.stdout[..]);
+
+    let mut nbr_of_fixed_blobs: u32 = 0;
+    let mut nbr_of_fix_errors: u32 = 0;
+    let mut attribute_errors: bool = false;
+    let mut unencrypted_blob_errors: bool = false;
+
+    let mut chkattr = start_chkattr(repo)?;
+    // FIXME extra scope to drop stdin/stdout mut references before wait()
+    {
+        let mut chkattrstdin = chkattr.stdin.as_mut().unwrap();
+        let chkattrstdout = chkattr.stdout.as_mut().unwrap();
+        let mut chkattrstdout_buffered = std::io::BufReader::new(chkattrstdout);
+
+        loop {
+            let mut data: Vec<u8> = Vec::new();
+            let n = output_buffered
+                .read_until(b'\0', &mut data)
+                .map_err(|e| format!("failed to read `git ls-files ...` output: {}", e))?;
+            if n == 0 {
+                break;
+            }
+
+            let line = std::str::from_utf8(&data[..])
+                .map_err(|e| format!("failed to convert command output to UTF-8: {}", e))?
+                .trim_matches(char::from(0))
+                .to_string();
+            let split: Vec<&str> = line.split_whitespace().collect();
+
+            let mut object_id: Option<&str> = None;
+            let tag = split[0];
+            let filename = match tag {
+                "?" => split[1],
+                _ => {
+                    let mode = split[1]
+                        .parse::<u32>()
+                        .map_err(|e| format!("failed to parse mode '{}': {}", split[0], e))?;
+                    object_id = Some(split[2]);
+                    if !is_git_file_mode(mode) {
+                        continue;
+                    }
+                    split[4]
+                }
+            };
+
+            let (filter_attr, diff_attr) =
+                get_file_attributes(&mut chkattrstdout_buffered, &mut chkattrstdin, filename)?;
+
+            let is_encrypted = match filter_attr.as_ref().map(String::as_str) {
+                None => false,
+                Some("git-crypt") => true,
+                Some(s) => s.starts_with("git-crypt-"),
+            };
+
+            if is_encrypted {
+                // File is encrypted
+                let blob_is_unencrypted =
+                    object_id.is_some() && !blob_is_encrypted(repo, object_id.unwrap())?;
+
+                if fix_problems && blob_is_unencrypted {
+                    if !Path::new(filename).exists() {
+                        eprintln!("Error: {}: cannot stage encrypted version because not present in working tree - please 'git rm' or 'git checkout' it", filename);
+                        nbr_of_fix_errors = nbr_of_fix_errors + 1;
+                    } else {
+                        touch_file(Path::new(filename))?;
+
+                        let add_output = std::process::Command::new("git")
+                            .arg("add")
+                            .arg("--")
+                            .arg(filename)
+                            .current_dir(repo)
+                            .output()
+                            .map_err(|e| format!("failed to run `git add`: {}", e))?;
+
+                        if !add_output.status.success() {
+                            let stderr_string = String::from_utf8(add_output.stderr).unwrap();
+                            return Err(format!("failed to git add: {}", stderr_string));
+                        }
+
+                        if file_is_encrypted(repo, filename)? {
+                            eprintln!("{}: staged encrypted version", filename);
+                            nbr_of_fixed_blobs = nbr_of_fixed_blobs + 1;
+                        } else {
+                            eprintln!("Error: {}: still unencrypted even after staging", filename);
+                            nbr_of_fix_errors = nbr_of_fix_errors + 1;
+                        }
+                    }
+                } else if !fix_problems && !show_unencrypted_only {
+                    // TODO: output the key name used to encrypt this file
+                    eprintln!("    encrypted: {}", filename);
+                    if diff_attr != filter_attr {
+                        // but diff filter is not properly set
+                        eprintln!(
+                            " *** WARNING: diff={} attribute not set ***",
+                            filter_attr.unwrap_or("LOGIC_ERROR".to_string())
+                        );
+                        attribute_errors = true;
+                    }
+                    if blob_is_unencrypted {
+                        // File not actually encrypted
+                        eprintln!(" *** WARNING: staged/committed version is NOT ENCRYPTED! ***");
+                        unencrypted_blob_errors = true;
+                    }
+                }
+            } else {
+                // File not encrypted
+                if !fix_problems && !show_encrypted_only {
+                    eprintln!("not encrypted: {}", filename);
+                }
+            }
+        }
+    }
+
+    let status = chkattr.wait().map_err(|e| {
+        format!(
+            "`git check-attr --stdin -z filter diff` failed to terminate: {}",
+            e
+        )
+    })?;
+    if !status.success() {
+        return Err(format!(
+            "`git check-attr --stdin -z filter diff` returned non-zero status"
+        ));
+    }
+
+    if attribute_errors {
+        eprintln!(
+            "
+Warning: one or more files has a git-crypt filter attribute but not a\
+corresponding git-crypt diff attribute.  For proper 'git diff' operation
+you should fix the .gitattributes file to specify the correct diff attribute.
+Consult the git-crypt documentation for help."
+        );
+    }
+
+    if unencrypted_blob_errors {
+        eprintln!(
+            "
+Warning: one or more files is marked for encryption via .gitattributes but
+was staged and/or committed before the .gitattributes file was in effect.
+Run 'git-crypt status' with the '-f' option to stage an encrypted version."
+        );
+    }
+
+    if nbr_of_fixed_blobs != 0 {
+        let s = if nbr_of_fixed_blobs == 1 { "" } else { "s" };
+        eprintln!("Staged {} encrypted file{}.", nbr_of_fixed_blobs, s);
+        eprintln!("Warning: if these files were previously committed, unencrypted versions still exist in the repository's history.");
+    }
+
+    if nbr_of_fix_errors != 0 {
+        let s = if nbr_of_fix_errors == 1 { "" } else { "s" };
+        eprintln!("Unable to stage {} file{}.", nbr_of_fix_errors, s);
+    }
+
+    if attribute_errors || unencrypted_blob_errors || nbr_of_fix_errors != 0 {
+        Err(String::new())
+    } else {
+        Ok(())
+    }
+}
 
 pub fn export_key(args: Vec<String>, repo: &Path) -> Result<(), String> {
     let mut opts = getopts::Options::new();
@@ -59,8 +379,8 @@ fn export_key_run(
         let mut f = ::std::fs::File::create(target_filename)
             .map_err(|e| format!("failed to create file '{:?}': {}", target_filename, e))?;
         f.write_all(&data)
-
-    }.map_err(|e| format!("failed to write key data: {}", e))?;
+    }
+    .map_err(|e| format!("failed to write key data: {}", e))?;
 
     Ok(())
 }
@@ -385,6 +705,27 @@ fn touch_file(p: &Path) -> Result<(), String> {
         .map_err(|e| format!("failed to set file atime/mtime: {}", e))
 }
 
+fn start_chkattr(repo: &Path) -> Result<::std::process::Child, String> {
+    if ::git::get_version()? < 10805 {
+        return Err("git older than 1.8.5 is not supported".to_string());
+    }
+    // In Git 1.8.5 (released 27 Nov 2013) and higher, we use a single `git check-attr` process
+    // to get the attributes of all files at once.  In prior versions, we had to fork and exec
+    // a separate `git check-attr` process for each file, since -z and --stdin aren't supported.
+    // In a repository with thousands of files, this results in an almost 100x speedup.
+    std::process::Command::new("git")
+        .arg("check-attr")
+        .arg("--stdin")
+        .arg("-z")
+        .arg("filter")
+        .arg("diff")
+        .current_dir(repo)
+        .stdin(::std::process::Stdio::piped())
+        .stdout(::std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to run git check-attr --stdin -z filter diff: {}", e))
+}
+
 fn get_encrypted_files(repo: &Path, key_name: Option<&str>) -> Result<Vec<String>, String> {
     let path_to_top = ::git::get_path_to_top(repo)?;
     // git ls-files -cz -- path_to_top
@@ -406,24 +747,7 @@ fn get_encrypted_files(repo: &Path, key_name: Option<&str>) -> Result<Vec<String
     let lsfilesout = lsfiles.stdout.as_mut().unwrap();
     let mut lsfilesout_buffered = std::io::BufReader::new(lsfilesout);
 
-    if ::git::get_version()? < 10805 {
-        return Err("git older than 1.8.5 is not supported".to_string());
-    }
-    // In Git 1.8.5 (released 27 Nov 2013) and higher, we use a single `git check-attr` process
-    // to get the attributes of all files at once.  In prior versions, we had to fork and exec
-    // a separate `git check-attr` process for each file, since -z and --stdin aren't supported.
-    // In a repository with thousands of files, this results in an almost 100x speedup.
-    let mut chkattr = std::process::Command::new("git")
-        .arg("check-attr")
-        .arg("--stdin")
-        .arg("-z")
-        .arg("filter")
-        .arg("diff")
-        .current_dir(repo)
-        .stdin(::std::process::Stdio::piped())
-        .stdout(::std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("failed to run git check-attr --stdin -z filter diff: {}", e))?;
+    let mut chkattr = start_chkattr(repo)?;
 
     let mut files: Vec<String> = Vec::new();
 
