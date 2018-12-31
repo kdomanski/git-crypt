@@ -1,6 +1,3 @@
-extern crate libc;
-use libc::{c_char, c_int};
-
 extern crate filetime;
 extern crate getopts;
 extern crate rand;
@@ -13,14 +10,6 @@ mod key;
 mod util;
 
 use std::env;
-use std::ffi::CString;
-
-#[link(name = "crypto", kind = "static")]
-#[link(name = "ssl", kind = "static")]
-#[link(name = "gitcrypt")]
-extern "C" {
-    fn cpp_main(argc: c_int, argv: *const *const c_char) -> c_int;
-}
 
 fn print_usage(out: &mut std::io::Write, arg0: String) {
     let mut s: String;
@@ -124,36 +113,12 @@ fn main() {
         "keygen" => commands::keygen(cmd_args),
         "export-key" => commands::export_key(cmd_args, working_dir.as_path()),
         "status" => commands::status(cmd_args, working_dir.as_path()),
-        _ => {
-            run_c_with_args(cpp_main, cmd, cmd_args);
-            Ok(())
+        x => {
+            Err(format!("unknown command: {}", x))
         }
     } {
         eprintln!("{}", msg);
         std::process::exit(1);
-    }
-}
-
-fn run_c_with_args(
-    f: unsafe extern "C" fn(argc: c_int, argv: *const *const c_char) -> i32,
-    cmd: &str,
-    mut cmd_args: Vec<String>,
-) {
-    let mut args: Vec<String> = vec![std::env::args().nth(0).unwrap(), cmd.to_string()];
-    args.append(&mut cmd_args);
-
-    let cs_args = args
-        .iter()
-        .map(|arg| CString::new(arg.as_bytes()).unwrap())
-        .collect::<Vec<CString>>();
-    let c_args = cs_args
-        .iter()
-        .map(|arg| arg.as_ptr())
-        .collect::<Vec<*const c_char>>();
-
-    unsafe {
-        let return_code = f(args.len() as c_int, c_args.as_ptr());
-        std::process::exit(return_code);
     }
 }
 
@@ -260,8 +225,7 @@ fn help_refresh() {
     eprint!("Usage: git-crypt refresh\n");
 }
 
-#[no_mangle]
-pub extern "C" fn help_status() {
+fn help_status() {
     //     |--------------------------------------------------------------------------------| 80 chars
     eprint!("Usage: git-crypt status [OPTIONS] [FILE ...]\n");
     //eprint!("   or: git-crypt status -r [OPTIONS]\n");

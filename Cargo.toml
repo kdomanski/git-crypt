@@ -4,14 +4,10 @@ version = "0.7.0"
 authors = ["Andrew Ayer <agwa@andrewayer.name>", "Kamil Domański <kamil@domanski.co>"]
 
 [dependencies]
-libc = "0.2"
 getopts = "0.2"
 rust-crypto = "0.2"
 aes-ctr = "0.3"
 rand = "0.6"
 tempfile = "3.0"
 filetime = "0.2"
-
-[build-dependencies]
-cc = { version = "1.0", features = ["parallel"] }
 
