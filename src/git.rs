@@ -347,8 +347,14 @@ mod tests {
 
         ::std::fs::create_dir(&somedir).unwrap();
 
-        assert_eq!(tempdir.path(), get_path_to_top(tempdir.path()).unwrap());
-        assert_eq!(tempdir.path(), get_path_to_top(&somedir).unwrap());
+        assert_eq!(
+            tempdir.path().canonicalize().unwrap(),
+            get_path_to_top(tempdir.path()).unwrap()
+        );
+        assert_eq!(
+            tempdir.path().canonicalize().unwrap(),
+            get_path_to_top(&somedir).unwrap()
+        );
     }
 
     #[test]

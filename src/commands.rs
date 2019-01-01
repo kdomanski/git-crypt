@@ -1703,7 +1703,7 @@ mod tests {
             .join(".git-crypt/keys/default/0/26AC6DD34577BEDD4A47A38A2343E74AB0BDF29F.gpg");
 
         assert_eq!(1, new_files.len());
-        assert_eq!(new_files[0], encrypted_key_path);
+        assert_eq!(new_files[0], encrypted_key_path.canonicalize().unwrap());
 
         let output = std::process::Command::new("gpg")
             .arg("--decrypt")
@@ -1737,7 +1737,7 @@ mod tests {
             .path()
             .join(".git-crypt/keys/default/0/26AC6DD34577BEDD4A47A38A2343E74AB0BDF29F.gpg");
         assert_eq!(1, new_files.len());
-        assert_eq!(new_files[0], encrypted_key_path);
+        assert_eq!(new_files[0], encrypted_key_path.canonicalize().unwrap());
 
         let new_files =
             encrypt_repo_key(Some("fookey"), &entry_fookey, &collab_keys, tempdir.path()).unwrap();
@@ -1745,7 +1745,7 @@ mod tests {
             .path()
             .join(".git-crypt/keys/fookey/0/26AC6DD34577BEDD4A47A38A2343E74AB0BDF29F.gpg");
         assert_eq!(1, new_files.len());
-        assert_eq!(new_files[0], encrypted_key_path);
+        assert_eq!(new_files[0], encrypted_key_path.canonicalize().unwrap());
 
         ::std::fs::remove_file(&key_path_default).unwrap();
         ::std::fs::remove_file(&key_path_fookey).unwrap();

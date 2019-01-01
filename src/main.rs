@@ -113,9 +113,7 @@ fn main() {
         "keygen" => commands::keygen(cmd_args),
         "export-key" => commands::export_key(cmd_args, working_dir.as_path()),
         "status" => commands::status(cmd_args, working_dir.as_path()),
-        x => {
-            Err(format!("unknown command: {}", x))
-        }
+        x => Err(format!("unknown command: {}", x)),
     } {
         eprintln!("{}", msg);
         std::process::exit(1);
