@@ -1607,6 +1607,10 @@ mod tests {
             .unwrap()
             .join("target/debug/git-crypt");
 
+        if !bin.exists() {
+            panic!("target/debug/git-crypt must be built for the tests to work. The filters require a clean git-crypt binary.");
+        }
+
         assert!(::std::process::Command::new("git")
             .arg("init")
             .current_dir(dir.path())
