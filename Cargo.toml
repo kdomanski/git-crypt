@@ -2,6 +2,7 @@
 name = "git-crypt"
 version = "0.7.0"
 authors = ["Andrew Ayer <agwa@andrewayer.name>", "Kamil Domański <kamil@domanski.co>"]
+exclude = ["/.travis.yml", "/test-identity.gpg.asc"]
 
 [dependencies]
 getopts = "0.2"
